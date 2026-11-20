@@ -1,0 +1,17 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const nodes=new Map();const node=k=>{if(!nodes.has(k))nodes.set(k,{innerHTML:'',textContent:'',style:{},open:false,focus(){},append(){},classList:{remove(){}},setAttribute(){},showModal(){this.open=true},close(){this.open=false}});return nodes.get(k)};
+let fields=[],saveFails=false;
+const ctx=vm.createContext({document:{querySelector:node,querySelectorAll:()=>fields,createElement:()=>({}),addEventListener(){}},window:{addEventListener(){}},history:{replaceState(a,b,hash){ctx.location.hash=hash}},location:{hash:'#dashboard'},localStorage:{getItem:()=>null,setItem(){if(saveFails)throw Error('quota')}},structuredClone,Date,Intl,setTimeout:()=>0,clearTimeout(){},crypto:require('node:crypto').webcrypto,assert});
+for(const f of ['navigation.js','class-notes.js','planner.js','students.js','staff.js','assessment-ssp.js','assessment-ot.js','assessments.js','app.js'])vm.runInContext(fs.readFileSync('dist/'+f,'utf8').replace(/go\(\);\s*$/,''),ctx);
+const run=c=>vm.runInContext(c,ctx);
+run(`page='dashboard';rememberSection(page);page='students';rememberSection(page);page='staff';rememberSection(page);assert.equal(previousSection(),'students');pageBack();assert.equal(location.hash,'students');page='students';rememberSection(page);assert.deepEqual(Array.from(sectionTrail),['dashboard','students']);assert.equal(previousSection(),'dashboard');`);
+console.log('PASS Back follows section order without cycling');
+run(`page='assessments';assessmentActive={id:'draft',problem:'unsaved'};assessmentDirty=true;data.assessments=[{id:'saved',problem:'keep'}];location.hash='#staff';assert.equal(guardNavigation('staff'),true);assert.equal(location.hash,'#assessments');assert.equal(assessmentDirty,true);pendingDiscard=null;assert.equal(data.assessments[0].problem,'keep');guardNavigation('staff');runDiscard();assert.equal(location.hash,'staff');assert.equal(assessmentDirty,false);assert.equal(assessmentActive,null);assert.equal(data.assessments[0].problem,'keep');`);
+console.log('PASS navigation guard keeps edits until confirmed and preserves saved assessments');
+run(`page='class-notes';activeNote=newClassNote();const draftId=activeNote.id;persistClassNote();activeNote.actual='new';persistClassNote();assert.equal(noteChanged(),true);assert.equal(rollbackNote(),true);assert.equal(data.classNotes.some(n=>n.id===draftId),false);activeNote=newClassNote();persistClassNote();noteCommit();const savedId=activeNote.id;activeNote.actual='changed';persistClassNote();assert.equal(rollbackNote(),true);assert.equal(activeNote.id,savedId);assert.equal(activeNote.actual,'');assert.equal(data.classNotes.find(n=>n.id===savedId).actual,'');noteTrack(activeNote);activeNote.actual='pending';persistClassNote();`);
+saveFails=true;
+run(`assert.equal(rollbackNote(),false);assert.equal(activeNote.actual,'pending');assert.equal(noteChanged(),true);`);
+saveFails=false;
+console.log('PASS autosaved note discard removes only new draft, restores existing note, and retains changes on storage failure');
+fields=[{name:'name',value:'original',type:'text'}];run(`dialog.open=true;trackDialog();assert.equal(dialogIsDirty(),false);`);fields[0].value='edited';run(`assert.equal(dialogIsDirty(),true);requestDialogClose();assert.equal(dialog.open,true);runDiscard();assert.equal(dialog.open,false);`);
+console.log('PASS modal cancellation requires confirmation and preserves form until confirmed');

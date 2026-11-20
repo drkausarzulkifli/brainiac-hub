@@ -1,0 +1,138 @@
+Staff directory implementation and QA complete. Hosting publication remains blocked.
+Saved Sites version: 6
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Version ID: appgprj_6af3411f0218819191eb39ac8465b702~appgver_7bc2f0f0fd98819184cb075299eca7c6
+Source commit: 9a577e3bf1e2154e69a858428438ca7acddd415e
+Latest deployment: appgdep_6af72af1e218819184e50d3aa945b5c3
+Status: failed
+Message: Failed to publish the built site.
+The first attempt also reported an unknown Cloudflare workers-sdk error. Three attempts failed. Archive confirmed saved (13 files).
+Resume by deploying this saved version; do not create a new site or save another duplicate version.
+
+Retry requested by user:
+Deployment: appgdep_6af72c0f74b48191a315442322219f58
+Updated: 2026-11-13T15:26:24.047942+00:00
+Status: failed
+Message: Failed to publish the built site.
+Owner-private access reconfirmed. Retain saved version 6 for a future retry.
+
+Audit publication attempt — 13 November 2026
+Source saved and pushed: 6fc7b31ee37b7607f839257c2b77240747149660
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Saved audit version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_38d5c9270a0481919724ac2a295dfa82
+Deployment: appgdep_6af72e77c29c8191ae528001e4283471
+Status: failed
+Error: Failed to publish the built site.
+Audit fixes are saved locally and remotely but not published. Retry this saved version rather than creating a duplicate version. Hosting failure root cause remains unconfirmed.
+
+Retry — 14 November 2026 (Malaysia)
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_38d5c9270a0481919724ac2a295dfa82
+Deployment: appgdep_6af73923c64c8191989460907ca5b5b4
+Status: failed
+Error: Failed to publish the built site.
+No new version created. Latest fixes remain saved but not live.
+
+Assessment publication — 14 November 2026 (Malaysia)
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Source: f4b3e1aae4dab417ee584759c272935d14d52c84
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_6e8830bb7b688191ab6518516c6e889e
+Deployment: appgdep_6af73d1c5fd881918e749e978eda5048
+Status: succeeded
+URL: https://beruntung-brainiac-demo.drkausarzulkifli.chatgpt.site
+Includes assessment form, staff feature and prior audit fixes. Supersedes failed publication attempts above.
+
+OT Denver II recording companion — 14 November 2026 (Malaysia)
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Source: 5b7e2c57651faaa5b7a9d880d2199a9528abf009
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_324cfd5bd5448191b139c476c3e3d827
+Deployment: appgdep_6af73ebe64d48191995ed0a39e430e77
+Status: succeeded
+URL: https://beruntung-brainiac-demo.drkausarzulkifli.chatgpt.site
+
+Short Sensory Profile publication — 14 November 2026 (Malaysia)
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Source: 0589d4e5843d5b6cd534715415e3cc4fed5861ca
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_1773ee8444648191bb9f88cf55a14e35
+Deployment: appgdep_6af7e79450208191b92b99ee3b7b7212
+Status: succeeded
+URL: https://beruntung-brainiac-demo.drkausarzulkifli.chatgpt.site
+
+Back and Discard publication — 14 November 2026 (Malaysia)
+Project: appgprj_6af3411f0218819191eb39ac8465b702
+Source: 6666fd3dfe5cd5db16266a00e8f6bd6872f29d5e
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_02f7ba5cfeb48191a47698ac58e5bf7d
+Deployment: appgdep_6af7e9909e888191af4848cdfbe6e579
+Status: succeeded
+URL: https://beruntung-brainiac-demo.drkausarzulkifli.chatgpt.site
+
+Progress Report: published successfully 2026-11-14
+Commit: e51c4c5c4c3c8c28b2a2d4983669da9d1d432980
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_68bece47713c8191ab1b247953203151
+Deployment: appgdep_6af80e826964819190e778178f81c1b1
+PDF validation: 3-page synthetic report rendered; browser download and unsaved-edit PDF guard passed.
+
+Connected workflow published 2026-11-14
+Commit: bde8e2bd0344d1af59996f5ab28707189afa20fe
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_aaa67a184d248191bae6ebe4a7664b87
+Deployment: appgdep_6af84f9206d081919a17063f532893b7
+Status: succeeded
+Validated programme enrolment, shared study plans, booking-linked EIP records, assessment PDF, therapy follow-up and student history.
+
+Backdated sessions and optional study plans published 2026-11-16
+Commit: f58248fb94934bf6d7a67842c2195509ee3677fb
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_57a42020b2908191b13b0adb996292e9
+Deployment: appgdep_6afa5148e51c8191a97f7460b6751e5a
+Status: succeeded
+Validated manual EIP completion without plan, direct plan selection, preserved observations and separate session/entry timestamps.
+
+Empty class-note page fixed 2026-11-16
+Commit: 225af2da995ea014f811d324dbb80a4feb8b2a84
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_8c0946e774b88191995c388ac028db55
+Deployment: appgdep_6afa5ec7d12481918c6bf7331c15d0ce
+Status: succeeded
+Fresh-browser entry flow verified without prior notes, bookings or preload.
+
+Save result dialogs published 2026-11-16
+Commit: 740dc51f4bbfbfb798b262c1247f7bee9113d3fa
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_a64c6bb12be48191b402da62a05d0cf7
+Deployment: appgdep_6afa60cf4bf48191bd7c0bfe100de3f8
+Status: succeeded
+Validated success, validation failure, denied storage, retry and silent autosave.
+
+Menu reordered 2026-11-16: Study plans before Nota kelas; Enquiries removed from navigation and Dashboard link.
+Commit: 8f0171a8fb8975900daea720c6250a62fbfe66fb
+Version: appgprj_6af3411f0218819191eb39ac8465b702~appgver_19353ab7fd388191b926a86a205f66fd
+Deployment: appgdep_6afa6250aac0819185162828c105fd7c
+Status: succeeded
+
+2026-11-16: Official branding published successfully.
+Commit: 7ac6ff3d90f493e7aad88a4276f4ad0e12137512
+Deployment: appgdep_6afa689381f88191a3295e5693bbe279
+URL: https://beruntung-brainiac-demo.drkausarzulkifli.chatgpt.site
+Owner-private access preserved. Responsive and PDF QA plus existing regression checks passed.
+
+2026-11-16: Lesson plans without approval; visible scheduled-slot picker and EIP autofill published.
+Commit: 4dc932651d8a546f9281bf2aa3fd3b9b70985b34
+Deployment: appgdep_6afaf253f48081919fc0b38354557f59 succeeded.
+Workflow, navigation, save feedback, planner, audit and package checks passed. Browser visual QA unavailable this turn.
+
+2026-11-16: Calendar-based EIP note slot selection published successfully.
+Commit: c3154d2698675b221bb77ff84fd78632b61f1298
+Deployment: appgdep_6afaf51bfdf08191b110378e5552b4c7
+Workflow, navigation, save feedback and package checks passed; browser visual QA unavailable.
+
+2026-11-16: Therapy session SOAP module published.
+Commit: c2adb5876ec080e75517afc095492b4a4cde4c79
+Deployment: appgdep_6afafabaa8f08191835de121d539f014 succeeded.
+SOAP, workflow, navigation, save feedback, planner and packaging checks passed. Visual browser QA unavailable.
+
+2026-11-17 MYT: Demo role simulation published (not real authentication).
+Commit: d4311775688615f57cca0478925d750089c67151
+Deployment: appgdep_6afb3b8ab0f88191ac2826453312c3d7 succeeded.
+Role matrix, menu/history filtering, route/form/calendar guards and dirty-form switching tests passed; existing SOAP/navigation/save/package checks passed. Browser visual QA unavailable.
+
+2026-11-17 MYT: Student DOB and automatic age published.
+Commit: 461097b8c3a577865d17ac408a0fde75c9904777
+Deployment: appgdep_6afb45a4caf08191a80bb00270e2cce9 succeeded.
+IC proposal/manual override, assessment/progress/therapy prefill, session-relative age, invalid dates and regressions passed. Browser visual QA unavailable.

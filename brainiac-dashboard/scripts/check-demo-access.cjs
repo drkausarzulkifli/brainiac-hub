@@ -1,0 +1,25 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const listeners=[],nodes=new Map(),storage=new Map();
+const node=k=>{if(!nodes.has(k))nodes.set(k,{innerHTML:'',textContent:'',value:'',style:{},classList:{remove(){},toggle(){}},setAttribute(){},focus(){},append(){},insertAdjacentHTML(){},close(){this.open=false},showModal(){this.open=true}});return nodes.get(k)};
+const ctx=vm.createContext({assert,structuredClone,Date,Intl,crypto:require('crypto').webcrypto,setTimeout:()=>0,clearTimeout(){},location:{hash:''},history:{replaceState(){}},window:{addEventListener(){}},document:{createElement:()=>({}),querySelector:node,querySelectorAll:()=>[],addEventListener:(type,fn,capture)=>listeners.push({type,fn,capture})},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},FormData:class{constructor(f){this.f=f}get(k){return this.f.values[k]??null}getAll(k){const v=this.get(k);return Array.isArray(v)?v:v?[v]:[]}}});
+for(const f of ['demo-access','navigation','class-notes','planner','students','staff','assessment-ssp','assessment-ot','assessments','progress-pdf','progress-reports','workflow','therapy-sessions','app'])vm.runInContext(fs.readFileSync('dist/'+f+'.js','utf8').replace(/go\(\);\s*$/,''),ctx);
+const run=s=>vm.runInContext(s,ctx);
+run(`
+assert.equal(demoRole,'admin');assert.ok(navs.every(n=>demoCanAccess(n[0])));
+assert.equal(switchDemoRole('teacher'),true);assert.deepEqual(navs.filter(n=>demoCanAccess(n[0])).map(n=>n[0]),['dashboard','students','student-history','sessions','attendance','plans','class-notes','progress-reports']);
+assert.ok(!document.querySelector('#nav').innerHTML.includes('href="#assessments"'));assert.equal(document.querySelector('#reset').hidden,true);
+location.hash='#assessments';go();assert.equal(page,'dashboard');
+data.datedBookings=[{key:'speech-slot',mode:'speech',purpose:'therapy',students:['a'],date:'2026-11-14',time:'09:00',staff:'T'}];
+startBookingWork('speech-slot');assert.equal(dialog.open,undefined);assert.equal(activeNote,null);
+data.classNotes=[{id:'n',students:[{id:'a'}],date:'2026-11-14',status:'Draf',studentNotes:{}}];data.therapyNotes=[{studentId:'a',date:'2026-11-14',mode:'speech',status:'Draf'}];data.assessments=[{id:'a1',studentId:'a',date:'2026-11-14',type:'speech',status:'Draf'}];data.progressReports=[];
+assert.deepEqual(studentTimeline('a').map(e=>e.module),['class-notes','therapy-sessions','assessments']);
+activeNote=null;assert.equal(switchDemoRole('therapist'),true);assert.deepEqual(navs.filter(n=>demoCanAccess(n[0])).map(n=>n[0]),['dashboard','students','student-history','sessions','attendance','assessments','therapy-sessions','progress-reports']);
+assert.deepEqual(studentTimeline('a').map(e=>e.module),['class-notes','therapy-sessions','assessments']);assert.equal(document.querySelector('#dashboard-note-shortcut').hidden,true);
+assert.ok(!slotWorkflowFields({planId:1},'eip').includes('select'));assert.equal(openStudyPlan(1),false);assert.ok(studentTimeline('a').find(e=>e.module==='assessments').body.includes('Laporan assessment')); 
+page='assessments';assessmentDirty=true;assert.equal(switchDemoRole('teacher'),false);assert.equal(demoRole,'therapist');assessmentDirty=false;
+assert.equal(switchDemoRole('teacher'),true);assert.equal(page,'dashboard');assert.equal(switchDemoRole('invalid'),false);assert.equal(demoRole,'teacher');
+`);
+const submit=listeners.find(l=>l.type==='submit'&&String(l.fn).includes('demoFormModules')).fn;let blocked=false;submit({target:{id:'therapy-soap-form'},preventDefault(){},stopImmediatePropagation(){blocked=true}});assert.equal(blocked,true);
+run(`assert.equal(switchDemoRole('admin'),true);assert.equal(studentTimeline('a').length,3);assert.equal(data.classNotes.length,1);assert.equal(data.therapyNotes.length,1);assert.equal(data.assessments.length,1);`);
+assert.equal(storage.get('brainiac-demo-role'),'admin');
+console.log('PASS role matrix, filtered menus and shared full history, direct-route and form guards, calendar actions, dirty-form switch protection, admin restoration and unchanged records');

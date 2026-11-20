@@ -1,0 +1,22 @@
+# Local packaging tools and downloaded binaries (PHP/npm archives)
+/hostinger-package-tools/
+
+# Generated deployment archives
+/*.zip
+/*.tar.gz
+
+# Local environment, secrets, and local test databases
+.env*
+.dev.vars*
+*.pem
+*.sqlite
+*.log
+brainiac-hub-secure/brainiac-private/config.php
+
+# Dependencies and build caches
+node_modules/
+.next/
+.vinext/
+.wrangler/
+.sites-runtime/
+.DS_Store

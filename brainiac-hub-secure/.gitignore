@@ -1,0 +1,4 @@
+brainiac-private/config.php
+tests/*.sqlite
+tests/*.log
+tests/*.png
