@@ -1,0 +1,66 @@
+name: Deploy Brainiac Hub to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'brainiac-hub-secure/**'
+      - '.github/workflows/deploy-hostinger.yml'
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: Syntax & Package Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Lint PHP & JS files
+        working-directory: brainiac-hub-secure
+        run: |
+          php -l public/api.php
+          php -l brainiac-private/bootstrap.php
+          for f in public/*.js; do node -c "$f"; done
+
+      - name: Verify package rules
+        working-directory: brainiac-hub-secure
+        run: python3 package.py
+
+  deploy:
+    name: Deploy to Hostinger
+    needs: verify
+    runs-on: ubuntu-latest
+    if: vars.HOSTINGER_DEPLOY_ENABLED == 'true'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy public/ to public_html/
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          local-dir: ./brainiac-hub-secure/public/
+          server-dir: ./public_html/
+          dangerous-clean-slate: false
+
+      - name: Deploy brainiac-private/ (excluding config.php)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          local-dir: ./brainiac-hub-secure/brainiac-private/
+          server-dir: ./brainiac-private/
+          exclude: |
+            **/.git*
+            config.php
+          dangerous-clean-slate: false
