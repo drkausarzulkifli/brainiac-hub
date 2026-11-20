@@ -1,0 +1,53 @@
+/* Brainiac Hub — Leave, Medical Claims & Payroll Module Styles */
+.hr-hero-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
+.hr-stat-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.hr-stat-label{font-size:11px;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
+.hr-stat-num{font-size:24px;font-weight:700;letter-spacing:-.5px;margin:8px 0 2px;color:var(--ink)}
+.hr-stat-sub{font-size:10px;color:var(--muted)}
+
+.hr-subtabs{display:flex;gap:10px;margin-bottom:20px;border-bottom:1px solid var(--line);padding-bottom:12px}
+.hr-tab-btn{background:none;border:none;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .15s}
+.hr-tab-btn:hover{background:var(--bg);color:var(--ink)}
+.hr-tab-btn.active{background:var(--soft);color:var(--teal)}
+
+.attachment-preview-box{display:flex;align-items:center;gap:12px;margin-top:8px;padding:10px;border:1px dashed var(--line);border-radius:8px;background:var(--bg)}
+.attachment-thumb{width:60px;height:60px;border-radius:6px;object-fit:cover;border:1px solid var(--line)}
+.attachment-info{font-size:11px;color:var(--muted);word-break:break-all}
+
+.status-chip{display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;font-size:10px;font-weight:600}
+.status-chip.pending{background:#fff3dd;color:#94631a}
+.status-chip.approved{background:#dcf2e8;color:#0d6955}
+.status-chip.rejected{background:#fdeeee;color:#a64545}
+
+/* Payslip Presentation */
+.payslip-card{background:#ffffff;border:1px solid var(--line);border-radius:12px;padding:24px;max-width:800px;margin:0 auto 24px;box-shadow:0 4px 18px rgba(0,0,0,0.04)}
+.payslip-header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid var(--teal);padding-bottom:16px;margin-bottom:18px}
+.payslip-title{font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.4px}
+.payslip-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:18px}
+.payslip-section h4{margin:0 0 10px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--line);padding-bottom:4px}
+.payslip-row{display:flex;justify-content:space-between;padding:5px 0;font-size:12px}
+.payslip-total-row{display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:700;border-top:1px solid var(--line);margin-top:6px}
+.payslip-net-box{background:var(--soft);border:1px solid #cce3dc;border-radius:9px;padding:14px 18px;display:flex;justify-content:space-between;align-items:center;margin-top:16px}
+.payslip-net-val{font-size:22px;font-weight:800;color:var(--teal)}
+
+@media(max-width:800px){
+  .hr-hero-stats{grid-template-columns:1fr 1fr}
+  .payslip-grid{grid-template-columns:1fr}
+}
+@media(max-width:500px){
+  .hr-hero-stats{grid-template-columns:1fr}
+}
+
+/* Utility buttons & Sidebar Section Headers */
+.mini-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;min-height:28px;border-radius:6px;font-size:11px;font-weight:600;line-height:1.2;cursor:pointer;text-decoration:none}
+.mini-btn svg{width:13px;height:13px}
+.nav-group-title{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);padding:14px 12px 4px;text-transform:uppercase}
+.nav-group-title:first-child{padding-top:4px}
+
+@media print{
+  body *{visibility:hidden}
+  #dialog,#dialog #payslip-print-area,#dialog #payslip-print-area *{visibility:visible}
+  #dialog{position:fixed;inset:0;width:100%;max-width:100%;border:none;box-shadow:none;padding:0;margin:0;background:#fff}
+  #dialog .dialog-head,#dialog .dialog-actions,#dialog .dialog-discard{display:none!important}
+  #payslip-print-area{box-shadow:none;border:1px solid #ccc;max-width:100%;margin:0}
+}

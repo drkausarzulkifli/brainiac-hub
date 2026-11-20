@@ -74,3 +74,210 @@ function limit(string $scope,int $max): void {
     query('DELETE FROM hub_rate WHERE expires<?',[$now]);
 }
 function reply(array $value): never {header('Content-Type: application/json; charset=utf-8');echo json_encode($value,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);exit;}
+function ensureAttendanceTable(): void { ensureHrTables(); }
+function ensureHrTables(): void {
+    global $pdo;static $checked=false;if($checked)return;$checked=true;
+    $driver=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);$engine=$driver==='mysql'?' ENGINE=InnoDB DEFAULT CHARSET=utf8mb4':'';
+    $run=function(string $sql) use ($pdo): void {
+        try{$pdo->exec($sql);}catch(Throwable $e){error_log('Brainiac ensureHrTables: '.$e->getMessage());}
+    };
+    $run("CREATE TABLE IF NOT EXISTS hub_hr_settings (
+        id INT PRIMARY KEY,
+        center_name VARCHAR(120) NOT NULL DEFAULT 'Beruntung Brainiac',
+        center_ssm VARCHAR(50) NOT NULL DEFAULT '202503030392 (003694359-M)',
+        epf_employer_no VARCHAR(50) DEFAULT '',
+        socso_employer_no VARCHAR(50) DEFAULT '',
+        latitude DECIMAL(10,8) NOT NULL DEFAULT 3.36965100,
+        longitude DECIMAL(11,8) NOT NULL DEFAULT 101.57162700,
+        geofence_radius_meters INT NOT NULL DEFAULT 100,
+        shift_hours DECIMAL(4,2) NOT NULL DEFAULT 8.50,
+        pay_day INT NOT NULL DEFAULT 27,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+    $run("INSERT ".($driver==='mysql'?'IGNORE':'OR IGNORE')." INTO hub_hr_settings (id, center_name, center_ssm, epf_employer_no, socso_employer_no, latitude, longitude, geofence_radius_meters, shift_hours, pay_day, updated_at) VALUES (1, 'Beruntung Brainiac', '202503030392 (003694359-M)', '', '', 3.36965100, 101.57162700, 100, 8.50, 27, '".stamp()."');");
+    $run("UPDATE hub_hr_settings SET latitude=3.36965100, longitude=101.57162700 WHERE id=1 AND ABS(latitude-3.139003)<0.0001 AND ABS(longitude-101.686855)<0.0001;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_staff_attendance (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        user_name VARCHAR(120) NOT NULL,
+        user_role VARCHAR(16) NOT NULL,
+        work_date VARCHAR(10) NOT NULL,
+        clock_in VARCHAR(30) NOT NULL,
+        clock_out VARCHAR(30) DEFAULT NULL,
+        duration_minutes INT DEFAULT 0,
+        latitude DECIMAL(10,8) DEFAULT NULL,
+        longitude DECIMAL(11,8) DEFAULT NULL,
+        distance_meters INT DEFAULT 0,
+        device_type VARCHAR(30) DEFAULT 'Mobile',
+        work_location VARCHAR(50) DEFAULT 'Pusat',
+        status VARCHAR(30) DEFAULT 'Tepat masa',
+        adjustment_reason TEXT DEFAULT NULL,
+        note TEXT DEFAULT NULL,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_leave_balances (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        year INT NOT NULL,
+        annual_total DECIMAL(4,1) NOT NULL DEFAULT 12.0,
+        annual_used DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+        annual_carry_forward DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+        carry_forward_max DECIMAL(4,1) NOT NULL DEFAULT 5.0,
+        medical_total DECIMAL(4,1) NOT NULL DEFAULT 14.0,
+        medical_used DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+        hospitalisation_total DECIMAL(4,1) NOT NULL DEFAULT 60.0,
+        hospitalisation_used DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+        maternity_total DECIMAL(4,1) NOT NULL DEFAULT 98.0,
+        maternity_used DECIMAL(4,1) NOT NULL DEFAULT 0.0,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_staff_leaves (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        user_name VARCHAR(120) NOT NULL,
+        leave_type VARCHAR(30) NOT NULL,
+        start_date VARCHAR(10) NOT NULL,
+        end_date VARCHAR(10) NOT NULL,
+        days_count DECIMAL(4,1) NOT NULL,
+        reason TEXT NOT NULL,
+        attachment_url LONGTEXT DEFAULT NULL,
+        attachment_name VARCHAR(255) DEFAULT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+        admin_notes TEXT DEFAULT NULL,
+        reviewed_by VARCHAR(36) DEFAULT NULL,
+        reviewed_at VARCHAR(30) DEFAULT NULL,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_medical_allowance_balances (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        year INT NOT NULL,
+        annual_limit DECIMAL(10,2) NOT NULL DEFAULT 500.00,
+        amount_used DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        balance DECIMAL(10,2) NOT NULL DEFAULT 500.00,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_medical_claims (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        user_name VARCHAR(120) NOT NULL,
+        year INT NOT NULL,
+        treatment_date VARCHAR(10) NOT NULL,
+        clinic_name VARCHAR(150) NOT NULL,
+        amount DECIMAL(10,2) NOT NULL,
+        receipt_url LONGTEXT NOT NULL,
+        receipt_name VARCHAR(255) DEFAULT NULL,
+        notes TEXT DEFAULT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+        admin_notes TEXT DEFAULT NULL,
+        payroll_month VARCHAR(7) DEFAULT NULL,
+        paid_via_payroll INT NOT NULL DEFAULT 0,
+        reviewed_by VARCHAR(36) DEFAULT NULL,
+        reviewed_at VARCHAR(30) DEFAULT NULL,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_staff_payroll_profiles (
+        id VARCHAR(36) PRIMARY KEY,
+        user_id VARCHAR(36) NOT NULL,
+        ic_no VARCHAR(20) NOT NULL DEFAULT '',
+        epf_no VARCHAR(30) NOT NULL DEFAULT '',
+        socso_no VARCHAR(30) NOT NULL DEFAULT '',
+        income_tax_no VARCHAR(30) NOT NULL DEFAULT '',
+        bank_name VARCHAR(60) NOT NULL DEFAULT '',
+        bank_acc_no VARCHAR(40) NOT NULL DEFAULT '',
+        basic_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        fixed_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        epf_employee_rate DECIMAL(4,2) NOT NULL DEFAULT 11.00,
+        epf_employer_rate DECIMAL(4,2) NOT NULL DEFAULT 13.00,
+        socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
+        eis_active INT NOT NULL DEFAULT 1,
+        monthly_pcb DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_payroll_runs (
+        id VARCHAR(36) PRIMARY KEY,
+        `year_month` VARCHAR(7) NOT NULL,
+        cutoff_start VARCHAR(10) NOT NULL,
+        cutoff_end VARCHAR(10) NOT NULL,
+        pay_date VARCHAR(10) NOT NULL,
+        total_basic DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_claims DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_gross DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_epf_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_epf_employer DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_socso_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_socso_employer DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_eis_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_eis_employer DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_pcb DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_net DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        status VARCHAR(20) NOT NULL DEFAULT 'Draft',
+        processed_by VARCHAR(36) NOT NULL,
+        created_at VARCHAR(30) NOT NULL,
+        updated_at VARCHAR(30) NOT NULL
+    )$engine;");
+
+    $run("CREATE TABLE IF NOT EXISTS hub_payslips (
+        id VARCHAR(36) PRIMARY KEY,
+        run_id VARCHAR(36) NOT NULL,
+        user_id VARCHAR(36) NOT NULL,
+        user_name VARCHAR(120) NOT NULL,
+        user_role VARCHAR(16) NOT NULL,
+        `year_month` VARCHAR(7) NOT NULL,
+        pay_date VARCHAR(10) NOT NULL,
+        basic_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        fixed_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        medical_claims DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        other_earnings DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        gross_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        epf_employee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        epf_employer DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        socso_employee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        socso_employer DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        eis_employee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        eis_employer DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        pcb_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        total_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        net_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        details_json LONGTEXT NOT NULL,
+        created_at VARCHAR(30) NOT NULL
+    )$engine;");
+}
+function haversineDistanceMeters(float $lat1, float $lon1, float $lat2, float $lon2): int {
+    $earthRadius=6371000;
+    $dLat=deg2rad($lat2-$lat1);$dLon=deg2rad($lon2-$lon1);
+    $a=sin($dLat/2)*sin($dLat/2)+cos(deg2rad($lat1))*cos(deg2rad($lat2))*sin($dLon/2)*sin($dLon/2);
+    $c=2*atan2(sqrt($a),sqrt(1-$a));
+    return (int)round($earthRadius*$c);
+}
+function calculateStatutoryContributions(float $basic, float $allowance, float $epfEeRate=11.0, float $epfErRate=13.0, string $socsoCat='cat1', bool $eisActive=true): array {
+    $gross=$basic+$allowance;
+    $actualEpfErRate=($gross>5000&&$epfErRate==13.0)?12.0:$epfErRate;
+    $epfEe=round($gross*($epfEeRate/100),2);
+    $epfEr=round($gross*($actualEpfErRate/100),2);
+    $socsoBase=min($gross,6000.0);
+    $socsoEe=($socsoCat==='cat1')?round($socsoBase*0.005,2):0.0;
+    $socsoEr=($socsoCat==='cat1')?round($socsoBase*0.0175,2):round($socsoBase*0.0125,2);
+    $eisBase=min($gross,6000.0);
+    $eisEe=$eisActive?round($eisBase*0.002,2):0.0;
+    $eisEr=$eisActive?round($eisBase*0.002,2):0.0;
+    return ['gross'=>$gross,'epf_employee'=>$epfEe,'epf_employer'=>$epfEr,'socso_employee'=>$socsoEe,'socso_employer'=>$socsoEr,'eis_employee'=>$eisEe,'eis_employer'=>$eisEr];
+}
+function malaysiaNow(): array {
+    try{$tz=new DateTimeZone('Asia/Kuala_Lumpur');$dt=new DateTimeImmutable('now',$tz);}catch(Throwable){$dt=new DateTimeImmutable('now +8 hours');}
+    return ['date'=>$dt->format('Y-m-d'),'time'=>$dt->format('H:i'),'iso'=>$dt->format('c')];
+}
