@@ -33,32 +33,22 @@ jobs:
         run: python3 package.py
 
   deploy:
-    name: Deploy to Hostinger via SSH
+    name: Deploy public_html to Hostinger
     needs: verify
     runs-on: ubuntu-latest
     if: vars.HOSTINGER_DEPLOY_ENABLED == 'true'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install sshpass
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Sync public_html & brainiac-private via SSH
-        env:
-          SSH_HOST: ${{ secrets.FTP_SERVER }}
-          SSH_USER: ${{ secrets.FTP_USERNAME }}
-          SSH_PASS: ${{ secrets.SSH_PASSWORD || secrets.FTP_PASSWORD }}
-        run: |
-          BASE_DIR=$(sshpass -p "$SSH_PASS" ssh -p 65002 -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" 'if [ -d "$HOME/domains/brainiachub.io/public_html" ]; then echo "$HOME/domains/brainiachub.io"; else echo "$HOME"; fi')
-          echo "Target base directory: $BASE_DIR"
-
-          sshpass -p "$SSH_PASS" ssh -p 65002 -o StrictHostKeyChecking=no "$SSH_USER@$SSH_HOST" "mkdir -p '$BASE_DIR/public_html' '$BASE_DIR/brainiac-private' && rm -rf '$BASE_DIR/public_html/public_html' '$BASE_DIR/public_html/.ftp-deploy-sync-state.json'"
-
-          sshpass -p "$SSH_PASS" rsync -avz -e "ssh -p 65002 -o StrictHostKeyChecking=no" \
-            ./brainiac-hub-secure/public/ \
-            "$SSH_USER@$SSH_HOST:$BASE_DIR/public_html/"
-
-          sshpass -p "$SSH_PASS" rsync -avz -e "ssh -p 65002 -o StrictHostKeyChecking=no" \
-            --exclude='config.php' \
-            ./brainiac-hub-secure/brainiac-private/ \
-            "$SSH_USER@$SSH_HOST:$BASE_DIR/brainiac-private/"
+      - name: Deploy public/ to Hostinger public_html
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftps
+          security: loose
+          local-dir: ./brainiac-hub-secure/public/
+          server-dir: ./
+          dangerous-clean-slate: false
