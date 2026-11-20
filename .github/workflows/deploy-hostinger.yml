@@ -40,22 +40,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install lftp
-        run: sudo apt-get update && sudo apt-get install -y lftp
+      - name: Deploy public/ to public_html/
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftps
+          security: loose
+          local-dir: ./brainiac-hub-secure/public/
+          server-dir: ./public_html/
+          dangerous-clean-slate: false
 
-      - name: Deploy public/ & brainiac-private/ via FTPS
-        env:
-          FTP_SERVER: ${{ secrets.FTP_SERVER }}
-          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
-          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
-        run: |
-          lftp -e "
-            set ssl:verify-certificate no;
-            set ftp:passive-mode true;
-            set net:timeout 30;
-            set net:max-retries 3;
-            open -u \"$FTP_USERNAME\",\"$FTP_PASSWORD\" $FTP_SERVER;
-            mirror -R --verbose --no-perms ./brainiac-hub-secure/public/ ./public_html/;
-            mirror -R --verbose --no-perms --exclude '^config\.php$' ./brainiac-hub-secure/brainiac-private/ ./brainiac-private/;
-            bye
-          "
+      - name: Deploy brainiac-private/ (excluding config.php)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          port: 21
+          protocol: ftps
+          security: loose
+          local-dir: ./brainiac-hub-secure/brainiac-private/
+          server-dir: ./brainiac-private/
+          exclude: |
+            **/.git*
+            config.php
+          dangerous-clean-slate: false
