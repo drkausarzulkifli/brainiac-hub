@@ -40,20 +40,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy public/ to public_html/
-        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
-        with:
-          server: ${{ secrets.FTP_SERVER }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          port: 21
-          protocol: ftps
-          security: loose
-          local-dir: ./brainiac-hub-secure/public/
-          server-dir: ./public_html/
-          dangerous-clean-slate: false
+      - name: Prepare combined deploy folder
+        run: |
+          mkdir -p _deploy/public_html _deploy/brainiac-private
+          cp -r brainiac-hub-secure/public/. _deploy/public_html/
+          cp -r brainiac-hub-secure/brainiac-private/. _deploy/brainiac-private/
+          rm -f _deploy/brainiac-private/config.php
 
-      - name: Deploy brainiac-private/ (excluding config.php)
+      - name: Deploy public_html & brainiac-private to Hostinger
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -62,9 +56,9 @@ jobs:
           port: 21
           protocol: ftps
           security: loose
-          local-dir: ./brainiac-hub-secure/brainiac-private/
-          server-dir: ./brainiac-private/
+          local-dir: ./_deploy/
+          server-dir: ./
           exclude: |
             **/.git*
-            config.php
+            brainiac-private/config.php
           dangerous-clean-slate: false
