@@ -50,5 +50,5 @@ jobs:
           protocol: ftps
           security: loose
           local-dir: ./brainiac-hub-secure/public/
-          server-dir:./public_html/
+          server-dir: ./public_html/
           dangerous-clean-slate: false
