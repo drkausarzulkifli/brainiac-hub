@@ -384,43 +384,65 @@ def detect_layout(session: FTPSession) -> tuple[str, str | None, str]:
     root_entries = session.run(lambda ftp: list_dir(ftp, pwd, resolve_links=True))
     print('FTP root entries:', sorted(root_entries.keys()))
 
-    # Case 1: Account home directory containing domains/brainiachub.io/
+    # Case 1a: Account home directory containing domains/brainiachub.io/
     if root_entries.get('domains') == 'dir':
         domains_dir = posixpath.join(pwd, 'domains')
         domains_entries = session.run(lambda ftp: list_dir(ftp, domains_dir, resolve_links=True))
+        print(f'FTP {domains_dir} entries:', sorted(domains_entries.keys()))
         if domains_entries.get('brainiachub.io') == 'dir':
             base = posixpath.join(domains_dir, 'brainiachub.io')
             return (
                 posixpath.join(base, 'public_html'),
                 posixpath.join(base, 'brainiac-private'),
-                'account root (domains/brainiachub.io)',
+                f'account root ({base})',
             )
 
-    # Case 2: FTP account starts inside public_html/ (either by path name or web markers)
-    in_named_public_html = posixpath.basename(pwd.rstrip('/')) == 'public_html'
-    if in_named_public_html or any(marker in root_entries for marker in WEB_MARKERS):
-        def _probe_parent(ftp: HostingerFTP_TLS) -> str | None:
+    # Probe parent directory once when starting inside a subdirectory such as /public_html
+    parent_info: dict[str, object] = {'parent': None, 'entries': {}, 'domain_base': None}
+
+    def _probe_parent(ftp: HostingerFTP_TLS) -> dict[str, object]:
+        info: dict[str, object] = {'parent': None, 'entries': {}, 'domain_base': None}
+        try:
+            ftp.cwd(pwd)
+            ftp.cwd('..')
+            parent = ftp.pwd() or '/'
+            if parent != pwd:
+                info['parent'] = parent
+                try:
+                    p_entries = list_dir(ftp, parent, resolve_links=True)
+                    info['entries'] = p_entries
+                    print(f'FTP parent ({parent}) entries:', sorted(p_entries.keys()))
+                    if p_entries.get('domains') == 'dir':
+                        domains_dir = posixpath.join(parent, 'domains')
+                        domains_entries = list_dir(ftp, domains_dir, resolve_links=True)
+                        print(f'FTP {domains_dir} entries:', sorted(domains_entries.keys()))
+                        if domains_entries.get('brainiachub.io') == 'dir':
+                            info['domain_base'] = posixpath.join(domains_dir, 'brainiachub.io')
+                except ftplib.error_perm as exc:
+                    print(f'Note: could not list parent ({parent}): {exc}')
+        except ftplib.all_errors:
+            pass
+        finally:
             try:
                 ftp.cwd(pwd)
-                ftp.cwd('..')
-                parent = ftp.pwd() or '/'
-                if parent != pwd:
-                    try:
-                        parent_entries = list_dir(ftp, parent, resolve_links=True)
-                        print(f'FTP parent ({parent}) entries:', sorted(parent_entries.keys()))
-                    except ftplib.error_perm as exc:
-                        print(f'Note: could not list parent ({parent}): {exc}')
-                    return posixpath.join(parent, 'brainiac-private')
-                return None
             except ftplib.all_errors:
-                return None
-            finally:
-                try:
-                    ftp.cwd(pwd)
-                except ftplib.all_errors:
-                    pass
+                pass
+        return info
 
-        private_dir = session.run(_probe_parent)
+    in_named_public_html = posixpath.basename(pwd.rstrip('/')) == 'public_html'
+    if in_named_public_html or any(marker in root_entries for marker in WEB_MARKERS):
+        parent_info = session.run(_probe_parent)
+        domain_base = parent_info['domain_base']
+        if isinstance(domain_base, str):
+            return (
+                posixpath.join(domain_base, 'public_html'),
+                posixpath.join(domain_base, 'brainiac-private'),
+                f'domain folder via parent ({domain_base})',
+            )
+
+        # Case 2: FTP account starts directly inside the site's public_html/
+        parent = parent_info['parent']
+        private_dir = posixpath.join(parent, 'brainiac-private') if isinstance(parent, str) else None
         return (pwd, private_dir, 'public_html root')
 
     # Case 3: FTP account is rooted in domain root containing public_html/
