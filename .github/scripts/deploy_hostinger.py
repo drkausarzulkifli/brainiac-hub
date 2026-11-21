@@ -396,19 +396,21 @@ def detect_layout(session: FTPSession) -> tuple[str, str | None, str]:
                 'account root (domains/brainiachub.io)',
             )
 
-    # Case 2: FTP account is rooted directly inside public_html/
-    if any(marker in root_entries for marker in WEB_MARKERS):
-        private_dir: str | None = None
-
+    # Case 2: FTP account starts inside public_html/ (either by path name or web markers)
+    in_named_public_html = posixpath.basename(pwd.rstrip('/')) == 'public_html'
+    if in_named_public_html or any(marker in root_entries for marker in WEB_MARKERS):
         def _probe_parent(ftp: HostingerFTP_TLS) -> str | None:
             try:
                 ftp.cwd(pwd)
                 ftp.cwd('..')
                 parent = ftp.pwd() or '/'
                 if parent != pwd:
-                    parent_entries = list_dir(ftp, parent, resolve_links=True)
-                    if 'public_html' in parent_entries or 'brainiac-private' in parent_entries:
-                        return posixpath.join(parent, 'brainiac-private')
+                    try:
+                        parent_entries = list_dir(ftp, parent, resolve_links=True)
+                        print(f'FTP parent ({parent}) entries:', sorted(parent_entries.keys()))
+                    except ftplib.error_perm as exc:
+                        print(f'Note: could not list parent ({parent}): {exc}')
+                    return posixpath.join(parent, 'brainiac-private')
                 return None
             except ftplib.all_errors:
                 return None
