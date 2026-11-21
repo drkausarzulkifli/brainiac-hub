@@ -1,7 +1,9 @@
 // Identity and persistence come from the PHP server. No patient data is stored in localStorage.
 let currentUser=null, csrfToken='', serverRevision=0, serverBusy=false, lastSaveError='', retryWrite=null, suspendedDialog=null, stateLoaded=false;
 async function api(action, payload){
- const response=await fetch('/api.php?action='+encodeURIComponent(action),{method:payload===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:payload===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:payload===undefined?undefined:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
+ const qIdx=action.indexOf('&');
+ const url=qIdx===-1?'/api.php?action='+encodeURIComponent(action):'/api.php?action='+encodeURIComponent(action.slice(0,qIdx))+action.slice(qIdx);
+ const response=await fetch(url,{method:payload===undefined?'GET':'POST',credentials:'same-origin',cache:'no-store',headers:payload===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:payload===undefined?undefined:JSON.stringify(payload),signal:AbortSignal.timeout(30000)});
  let result;try{result=await response.json()}catch{throw new Error('Server tidak memberikan jawapan yang sah. Simpanan belum dapat disahkan.')}
  if(!response.ok){const error=new Error(result.error||'Permintaan gagal.');error.status=response.status;throw error}return result;
 }
@@ -43,6 +45,7 @@ async function enterApp(user){
  document.querySelector('.user b').textContent=user.name;
  document.querySelectorAll('.user .avatar,.header-right .avatar').forEach(el=>el.textContent=user.name.split(' ').map(n=>n[0]).slice(0,2).join(''));
  document.querySelector('#account-users').hidden=user.role!=='admin';
+ if(typeof fetchClockStatus==='function'&&user.role!=='therapist')fetchClockStatus();else{const w=document.querySelector('#header-clock-widget');if(w)w.innerHTML=''}
  resetIdleTimer();
 }
 document.addEventListener('submit',async e=>{

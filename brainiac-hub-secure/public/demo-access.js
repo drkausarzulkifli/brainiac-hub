@@ -1,11 +1,11 @@
 // UI mirrors the authenticated server role. api.php independently enforces every write.
 const demoRoles={admin:'Admin',teacher:'Cikgu',therapist:'Terapis'};
-const demoAccess={admin:null,teacher:['dashboard','students','student-history','sessions','attendance','plans','class-notes','progress-reports'],therapist:['dashboard','students','student-history','sessions','attendance','assessments','therapy-sessions','progress-reports']};
+const demoAccess={admin:null,teacher:['dashboard','students','student-history','sessions','attendance','plans','class-notes','progress-reports','staff-attendance','leaves','claims','payroll'],therapist:['dashboard','students','student-history','sessions','attendance','assessments','therapy-sessions','progress-reports']};
 let demoRole=null;
 function demoCanAccess(module){return Object.hasOwn(demoRoles,demoRole)&&(demoRole==='admin'||demoAccess[demoRole].includes(module))}
 function demoDeny(){notify('Modul ini tidak tersedia untuk peranan '+demoRoles[demoRole]+'.');return false}
 function demoBookingModule(b){return b?.mode==='eip'?'class-notes':b?.purpose==='therapy'?'therapy-sessions':'assessments'}
-const demoFormModules={'staff-form':'staff','study-plan-form':'plans','class-note-form':'class-notes','note-existing-session-form':'class-notes','note-start-session-form':'class-notes','assessment-form':'assessments','therapy-note-form':'therapy-sessions','therapy-soap-form':'therapy-sessions','progress-form':'progress-reports','student-form':'students','slot-form':'sessions','add-form':'sessions'};
+const demoFormModules={'staff-form':'staff','study-plan-form':'plans','class-note-form':'class-notes','note-existing-session-form':'class-notes','note-start-session-form':'class-notes','assessment-form':'assessments','therapy-note-form':'therapy-sessions','therapy-soap-form':'therapy-sessions','progress-form':'progress-reports','student-form':'students','slot-form':'sessions','add-form':'sessions','clock-in-form':'staff-attendance','clock-out-form':'staff-attendance','admin-attendance-form':'staff-attendance','hr-settings-form':'staff-attendance','apply-leave-form':'leaves','admin-quota-form':'leaves','apply-claim-form':'claims','admin-claim-limit-form':'claims','admin-payroll-profile-form':'payroll'};
 function demoActionModule(el){
  if(!el)return null;const d=el.dataset||{},id=el.id||'';
  if(d.go)return d.go;if(el.tagName==='A'&&el.getAttribute('href')?.startsWith('#'))return el.getAttribute('href').slice(1);

@@ -79,7 +79,601 @@ if($method==='POST' && $action==='state') {
     query('INSERT INTO hub_writes(id,actor,digest,revision,created_at) VALUES(?,?,?,?,?)',[$request,$u['id'],$digest,$rev+1,stamp()]);
     audit('records_saved',['collections'=>$changes,'revision'=>$rev+1]);$pdo->commit();reply(['ok'=>true,'revision'=>$rev+1]);
 }
+function requirePermanentStaff(array $user): void {
+    if(($user['role']??'')==='therapist') {
+        fail(403,'Modul HR & Penggajian khas untuk Guru dan Admin sahaja. Terapis sambilan tidak memerlukan modul ini.');
+    }
+}
+// HR Settings (Public to permanent staff for center coordinates, admin for saving)
+if($method==='GET' && $action==='hr_settings') {
+    ensureHrTables();
+    $s=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    reply(['settings'=>$s?:[]]);
+}
+if($method==='POST' && $action==='hr_settings_save') {
+    if($u['role']!=='admin')fail(403,'Akses Admin diperlukan.');
+    ensureHrTables();
+    $name=trim((string)($b['center_name']??'Beruntung Brainiac'));
+    $ssm=trim((string)($b['center_ssm']??'202503030392 (003694359-M)'));
+    $epf=trim((string)($b['epf_employer_no']??''));
+    $socso=trim((string)($b['socso_employer_no']??''));
+    $lat=(float)($b['latitude']??3.36965100);
+    $lon=(float)($b['longitude']??101.57162700);
+    $radius=max(10,(int)($b['geofence_radius_meters']??100));
+    $shift=max(1.0,(float)($b['shift_hours']??8.50));
+    $payDay=min(31,max(1,(int)($b['pay_day']??27)));
+    query('UPDATE hub_hr_settings SET center_name=?,center_ssm=?,epf_employer_no=?,socso_employer_no=?,latitude=?,longitude=?,geofence_radius_meters=?,shift_hours=?,pay_day=?,updated_at=? WHERE id=1',
+        [$name,$ssm,$epf,$socso,$lat,$lon,$radius,$shift,$payDay,stamp()]);
+    audit('hr_settings_updated',['lat'=>$lat,'lon'=>$lon,'radius'=>$radius],$u['id']);
+    reply(['ok'=>true,'message'=>'Tetapan HR & Geofencing berjaya dikemas kini.']);
+}
+
+// Attendance & Geofencing Endpoints
+if($method==='GET' && $action==='clock_status') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $my=malaysiaNow();
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    $rec=query('SELECT * FROM hub_staff_attendance WHERE user_id=? AND work_date=? ORDER BY created_at DESC LIMIT 1',[$u['id'],$my['date']])->fetch();
+    reply([
+        'today'=>$my['date'],
+        'currentTime'=>$my['time'],
+        'settings'=>$settings,
+        'record'=>$rec?:null,
+        'status'=>!$rec?'not_clocked_in':(empty($rec['clock_out'])?'clocked_in':'clocked_out')
+    ]);
+}
+if($method==='POST' && $action==='clock_in') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $my=malaysiaNow();
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    $existing=query('SELECT * FROM hub_staff_attendance WHERE user_id=? AND work_date=? AND clock_out IS NULL LIMIT 1',[$u['id'],$my['date']])->fetch();
+    if($existing) fail(409,'Anda sudah Clock In hari ini pada '.substr($existing['clock_in'],11,5).'. Sila Clock Out apabila tamat syif.');
+    
+    $isMobile=!empty($b['is_mobile']);
+    $lat=isset($b['latitude'])&&$b['latitude']!==''?(float)$b['latitude']:null;
+    $lon=isset($b['longitude'])&&$b['longitude']!==''?(float)$b['longitude']:null;
+    if(!$isMobile && $u['role']!=='admin') {
+        fail(422,'Wajib menggunakan telefon pintar staf untuk Clock In dengan pengesahan GPS premis.');
+    }
+    if(($lat===null || $lon===null) && $u['role']!=='admin') {
+        fail(422,'Lokasi GPS tidak dikesan. Sila hidupkan Location Services (GPS) pada telefon pintar anda.');
+    }
+
+    $dist=0;
+    $allowedRadius=(int)($settings['geofence_radius_meters']??100);
+    if($lat!==null && $lon!==null) {
+        $cLat=(float)($settings['latitude']??3.36965100);
+        $cLon=(float)($settings['longitude']??101.57162700);
+        $dist=haversineDistanceMeters($lat,$lon,$cLat,$cLon);
+        if($dist>$allowedRadius && $u['role']!=='admin') {
+            fail(422,"Anda berada di luar lingkungan pusat ($dist meter). Clock In hanya dibenarkan dalam lingkungan {$allowedRadius}m dari Beruntung Brainiac.");
+        }
+    }
+
+    $loc=trim((string)($b['location']??'Pusat'));
+    $note=trim((string)($b['note']??''));
+    if(strlen($note)>1000)fail(422,'Catatan terlalu panjang.');
+    $status=((int)str_replace(':','',$my['time'])>900)?'Lewat':'Tepat masa';
+    $id=uid();
+    query('INSERT INTO hub_staff_attendance(id,user_id,user_name,user_role,work_date,clock_in,clock_out,duration_minutes,latitude,longitude,distance_meters,device_type,work_location,status,note,created_at,updated_at) VALUES(?,?,?,?,?,?,NULL,0,?,?,?,?,?,?,?,?,?)',
+        [$id,$u['id'],$u['name'],$u['role'],$my['date'],$my['iso'],$lat,$lon,$dist,$isMobile?'Mobile':'Desktop',$loc,$status,$note,stamp(),stamp()]);
+    audit('clock_in',['date'=>$my['date'],'time'=>$my['time'],'dist'=>$dist],$u['id']);
+    $rec=query('SELECT * FROM hub_staff_attendance WHERE id=?',[$id])->fetch();
+    reply(['ok'=>true,'record'=>$rec,'message'=>'Clock In berjaya disahkan pada '.$my['time'].' (Jarak: '.$dist.'m). Selamat bertugas!']);
+}
+if($method==='POST' && $action==='clock_out') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $my=malaysiaNow();
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    $existing=query('SELECT * FROM hub_staff_attendance WHERE user_id=? AND work_date=? AND clock_out IS NULL ORDER BY created_at DESC LIMIT 1',[$u['id'],$my['date']])->fetch();
+    if(!$existing){
+        $any=query('SELECT * FROM hub_staff_attendance WHERE user_id=? AND work_date=? ORDER BY created_at DESC LIMIT 1',[$u['id'],$my['date']])->fetch();
+        if($any&&!empty($any['clock_out']))fail(409,'Anda sudah selesai Clock Out untuk hari ini pada '.substr($any['clock_out'],11,5).'.');
+        fail(404,'Tiada rekod Clock In aktif hari ini.');
+    }
+    $note=trim((string)($b['note']??''));
+    $finalNote=$existing['note'];
+    if($note!==''){$finalNote=$finalNote?($finalNote.' | '.$note):$note;}
+    if(strlen($finalNote)>2000)$finalNote=substr($finalNote,0,2000);
+    $inTime=strtotime($existing['clock_in']);
+    $outTime=time();
+    $mins=max(1,(int)round(($outTime-$inTime)/60));
+
+    $reqMins=(int)round(((float)($settings['shift_hours']??8.50))*60);
+    $wasLate=str_starts_with((string)$existing['status'],'Lewat');
+    if($mins>=$reqMins){
+        $status=$wasLate?'Lewat (Cukup Syif)':'Cukup Syif';
+    }else{
+        $status=$wasLate?'Lewat (Kurang Jam)':'Kurang Jam';
+    }
+
+    query('UPDATE hub_staff_attendance SET clock_out=?,duration_minutes=?,status=?,note=?,updated_at=? WHERE id=?',
+        [$my['iso'],$mins,$status,$finalNote,stamp(),$existing['id']]);
+    audit('clock_out',['date'=>$my['date'],'time'=>$my['time'],'duration'=>$mins],$u['id']);
+    $rec=query('SELECT * FROM hub_staff_attendance WHERE id=?',[$existing['id']])->fetch();
+    reply(['ok'=>true,'record'=>$rec,'message'=>'Clock Out berjaya direkodkan pada '.$my['time'].' ('.$status.'). Terima kasih atas khidmat anda!']);
+}
+if($method==='GET' && $action==='my_attendance') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $rows=query('SELECT * FROM hub_staff_attendance WHERE user_id=? ORDER BY work_date DESC, clock_in DESC LIMIT 90',[$u['id']])->fetchAll();
+    reply(['records'=>$rows]);
+}
+
+function ensureStaffLeaveBalance(string $userId, int $year): array {
+    $bal=query('SELECT * FROM hub_leave_balances WHERE user_id=? AND year=?',[$userId,$year])->fetch();
+    if($bal)return $bal;
+    // Automatic annual rollover (carry forward up to carry_forward_max from previous year)
+    $prev=query('SELECT * FROM hub_leave_balances WHERE user_id=? AND year=?',[$userId,$year-1])->fetch();
+    $carry=0.0;$carryMax=5.0;$annTot=12.0;$medTot=14.0;$hospTot=60.0;$matTot=98.0;
+    if($prev){
+        $carryMax=(float)$prev['carry_forward_max'];
+        $rem=max(0.0,((float)$prev['annual_total']+(float)$prev['annual_carry_forward'])-(float)$prev['annual_used']);
+        $carry=min($carryMax,$rem);
+        $annTot=(float)$prev['annual_total'];
+        $medTot=(float)$prev['medical_total'];
+        $hospTot=(float)$prev['hospitalisation_total'];
+        $matTot=(float)$prev['maternity_total'];
+    }
+    $id=uid();
+    query('INSERT INTO hub_leave_balances (id,user_id,year,annual_total,annual_used,annual_carry_forward,carry_forward_max,medical_total,medical_used,hospitalisation_total,hospitalisation_used,maternity_total,maternity_used,created_at,updated_at) VALUES (?,?,?,?,0.0,?,?,?,0.0,?,0.0,?,0.0,?,?)',
+        [$id,$userId,$year,$annTot,$carry,$carryMax,$medTot,$hospTot,$matTot,stamp(),stamp()]);
+    return query('SELECT * FROM hub_leave_balances WHERE id=?',[$id])->fetch();
+}
+
+function ensureStaffClaimAllowance(string $userId, int $year): array {
+    $bal=query('SELECT * FROM hub_medical_allowance_balances WHERE user_id=? AND year=?',[$userId,$year])->fetch();
+    if($bal)return $bal;
+    // Reset every 1st Jan, keeping custom annual_limit if previously set
+    $prev=query('SELECT * FROM hub_medical_allowance_balances WHERE user_id=? AND year=?',[$userId,$year-1])->fetch();
+    $limit=$prev?(float)$prev['annual_limit']:500.00;
+    $id=uid();
+    query('INSERT INTO hub_medical_allowance_balances(id,user_id,year,annual_limit,amount_used,balance,created_at,updated_at) VALUES(?,?,?,?,0.00,?,?,?)',
+        [$id,$userId,$year,$limit,$limit,stamp(),stamp()]);
+    return query('SELECT * FROM hub_medical_allowance_balances WHERE id=?',[$id])->fetch();
+}
+
+// Leaves & Balances (Staff)
+if($method==='GET' && $action==='my_leaves') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $year=(int)date('Y');
+    $bal=ensureStaffLeaveBalance($u['id'],$year);
+    $history=query('SELECT * FROM hub_staff_leaves WHERE user_id=? ORDER BY created_at DESC LIMIT 60',[$u['id']])->fetchAll();
+    reply(['balance'=>$bal,'leaves'=>$history]);
+}
+if($method==='POST' && $action==='apply_leave') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $year=(int)date('Y');
+    $type=trim((string)($b['leave_type']??'annual'));
+    $startDate=trim((string)($b['start_date']??''));
+    $endDate=trim((string)($b['end_date']??''));
+    $days=max(0.5,(float)($b['days_count']??1.0));
+    $reason=trim((string)($b['reason']??''));
+    $attachmentUrl=trim((string)($b['attachment_url']??''));
+    $attachmentName=trim((string)($b['attachment_name']??''));
+    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$startDate)||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$endDate))fail(422,'Format tarikh cuti tidak sah.');
+    if($endDate<$startDate)fail(422,'Tarikh akhir cuti tidak boleh lebih awal daripada tarikh mula.');
+    if($reason==='')fail(422,'Sila masukkan sebab permohonan cuti.');
+    if($type==='medical' && $attachmentUrl==='')fail(422,'Wajib memuat naik foto dokumen sijil cuti sakit (MC).');
+
+    $bal=ensureStaffLeaveBalance($u['id'],$year);
+    if($bal && in_array($type,['annual','medical','hospitalisation','maternity'],true)){
+        $tot=(float)$bal[$type.'_total']+($type==='annual'?(float)$bal['annual_carry_forward']:0);
+        $usd=(float)$bal[$type.'_used'];
+        if(($usd+$days)>$tot)fail(422,"Baki cuti tidak mencukupi (Baki: ".($tot-$usd)." hari).");
+    }
+    $id=uid();
+    query('INSERT INTO hub_staff_leaves(id,user_id,user_name,leave_type,start_date,end_date,days_count,reason,attachment_url,attachment_name,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$id,$u['id'],$u['name'],$type,$startDate,$endDate,$days,$reason,$attachmentUrl?:null,$attachmentName?:null,'Pending',stamp(),stamp()]);
+    audit('apply_leave',['type'=>$type,'days'=>$days,'start'=>$startDate],$u['id']);
+    reply(['ok'=>true,'id'=>$id,'message'=>'Permohonan cuti berjaya dihantar untuk kelulusan Pentadbir.']);
+}
+
+// Medical Claims (Staff)
+if($method==='GET' && $action==='my_claims') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $year=(int)date('Y');
+    $bal=ensureStaffClaimAllowance($u['id'],$year);
+    $claims=query('SELECT * FROM hub_medical_claims WHERE user_id=? ORDER BY created_at DESC LIMIT 60',[$u['id']])->fetchAll();
+    reply(['allowance'=>$bal,'claims'=>$claims]);
+}
+if($method==='POST' && $action==='apply_claim') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $year=(int)date('Y');
+    $treatDate=trim((string)($b['treatment_date']??''));
+    $clinic=trim((string)($b['clinic_name']??''));
+    $amount=max(0.01,round((float)($b['amount']??0),2));
+    $notes=trim((string)($b['notes']??''));
+    $receiptUrl=trim((string)($b['receipt_url']??''));
+    $receiptName=trim((string)($b['receipt_name']??''));
+    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$treatDate))fail(422,'Format tarikh rawatan tidak sah.');
+    if($clinic==='')fail(422,'Sila masukkan nama klinik/hospital.');
+    if($amount<=0)fail(422,'Jumlah tuntutan mesti lebih daripada RM0.');
+    if($receiptUrl==='')fail(422,'Wajib memuat naik foto resit bil rawatan klinik.');
+
+    $bal=ensureStaffClaimAllowance($u['id'],$year);
+    $rem=(float)$bal['balance'];
+    if($amount>$rem)fail(422,"Jumlah tuntutan (RM".number_format($amount,2).") melebihi baki elaun perubatan tahunan anda (Baki: RM".number_format($rem,2).").");
+
+    $id=uid();
+    query('INSERT INTO hub_medical_claims(id,user_id,user_name,year,treatment_date,clinic_name,amount,receipt_url,receipt_name,notes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$id,$u['id'],$u['name'],$year,$treatDate,$clinic,$amount,$receiptUrl,$receiptName?:null,$notes,'Pending',stamp(),stamp()]);
+    audit('apply_claim',['clinic'=>$clinic,'amount'=>$amount],$u['id']);
+    reply(['ok'=>true,'id'=>$id,'message'=>'Tuntutan perubatan RM'.number_format($amount,2).' berjaya dihantar untuk semakan Admin.']);
+}
+
+// Self-Service Payslips
+if($method==='GET' && $action==='my_payslips') {
+    requirePermanentStaff($u);
+    ensureHrTables();
+    $rows=query('SELECT * FROM hub_payslips WHERE user_id=? ORDER BY `year_month` DESC',[$u['id']])->fetchAll();
+    reply(['payslips'=>$rows]);
+}
+
+// ADMIN-ONLY ACTIONS
 if($u['role']!=='admin')fail(403,'Akses Admin diperlukan.');
+
+// Admin Attendance
+if($method==='GET' && $action==='admin_attendance') {
+    ensureHrTables();
+    $from=trim((string)($_GET['from']??''));
+    $to=trim((string)($_GET['to']??''));
+    $userId=trim((string)($_GET['user_id']??''));
+    $role=trim((string)($_GET['role']??''));
+    $sql='SELECT * FROM hub_staff_attendance WHERE 1=1';
+    $args=[];
+    if($from!==''&&preg_match('/^\d{4}-\d{2}-\d{2}$/',$from)){$sql.=' AND work_date>=?';$args[]=$from;}
+    if($to!==''&&preg_match('/^\d{4}-\d{2}-\d{2}$/',$to)){$sql.=' AND work_date<=?';$args[]=$to;}
+    if($userId!==''&&$userId!=='all'){$sql.=' AND user_id=?';$args[]=$userId;}
+    if($role!==''&&$role!=='all'){$sql.=' AND user_role=?';$args[]=$role;}
+    $sql.=' ORDER BY work_date DESC, clock_in DESC LIMIT 500';
+    $rows=query($sql,$args)->fetchAll();
+    $users=query("SELECT id, name, role, email FROM hub_users WHERE role IN ('admin','teacher') ORDER BY name")->fetchAll();
+    reply(['records'=>$rows,'users'=>$users]);
+}
+if($method==='POST' && $action==='admin_attendance_save') {
+    ensureHrTables();
+    $id=trim((string)($b['id']??''));
+    $userId=trim((string)($b['user_id']??''));
+    $targetUser=query('SELECT * FROM hub_users WHERE id=?',[$userId])->fetch();
+    if(!$targetUser)fail(404,'Staf tidak ditemui.');
+    $workDate=trim((string)($b['work_date']??''));
+    if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$workDate))fail(422,'Format tarikh tidak sah (YYYY-MM-DD).');
+    $clockIn=trim((string)($b['clock_in']??''));
+    $clockOut=trim((string)($b['clock_out']??''));
+    $loc=trim((string)($b['work_location']??'Pusat'));
+    $status=trim((string)($b['status']??'Tepat masa'));
+    $reason=trim((string)($b['adjustment_reason']??''));
+    if($reason==='')fail(422,'Wajib memasukkan Sebab Pelarasan Manual untuk tujuan audit.');
+    $note=trim((string)($b['note']??''));
+    $mins=(int)($b['duration_minutes']??0);
+    if($mins<=0&&$clockIn!==''&&$clockOut!==''){
+        $mins=max(0,(int)round((strtotime($clockOut)-strtotime($clockIn))/60));
+    }
+    if($id){
+        $old=query('SELECT * FROM hub_staff_attendance WHERE id=?',[$id])->fetch();
+        if(!$old)fail(404,'Rekod kehadiran tidak ditemui.');
+        query('UPDATE hub_staff_attendance SET user_id=?,user_name=?,user_role=?,work_date=?,clock_in=?,clock_out=?,duration_minutes=?,work_location=?,status=?,adjustment_reason=?,note=?,updated_at=? WHERE id=?',
+            [$targetUser['id'],$targetUser['name'],$targetUser['role'],$workDate,$clockIn,$clockOut?:null,$mins,$loc,$status,$reason,$note,stamp(),$id]);
+        audit('admin_attendance_edit',['id'=>$id,'user_id'=>$targetUser['id'],'reason'=>$reason],$u['id']);
+    }else{
+        $id=uid();
+        query('INSERT INTO hub_staff_attendance(id,user_id,user_name,user_role,work_date,clock_in,clock_out,duration_minutes,work_location,status,adjustment_reason,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,$targetUser['id'],$targetUser['name'],$targetUser['role'],$workDate,$clockIn,$clockOut?:null,$mins,$loc,$status,$reason,$note,stamp(),stamp()]);
+        audit('admin_attendance_add',['id'=>$id,'user_id'=>$targetUser['id'],'reason'=>$reason],$u['id']);
+    }
+    reply(['ok'=>true,'id'=>$id,'message'=>'Rekod kehadiran berjaya diselaraskan.']);
+}
+if($method==='POST' && $action==='admin_attendance_delete') {
+    ensureHrTables();
+    $id=trim((string)($b['id']??''));
+    query('DELETE FROM hub_staff_attendance WHERE id=?',[$id]);
+    audit('admin_attendance_delete',['id'=>$id],$u['id']);
+    reply(['ok'=>true,'message'=>'Rekod kehadiran dipadamkan.']);
+}
+
+// Admin Leaves Management
+if($method==='GET' && $action==='admin_leaves') {
+    ensureHrTables();
+    $year=(int)date('Y');
+    $users=query("SELECT id, name, role, email FROM hub_users WHERE role IN ('admin','teacher') ORDER BY name")->fetchAll();
+    foreach($users as $usr){ensureStaffLeaveBalance($usr['id'],$year);}
+    $leaves=query('SELECT * FROM hub_staff_leaves ORDER BY created_at DESC LIMIT 300')->fetchAll();
+    $balances=query('SELECT b.*, u.name as user_name, u.role as user_role, u.email FROM hub_leave_balances b JOIN hub_users u ON b.user_id = u.id WHERE b.year=? ORDER BY u.name',[$year])->fetchAll();
+    reply(['leaves'=>$leaves,'balances'=>$balances,'users'=>$users]);
+}
+if($method==='POST' && $action==='admin_leave_action') {
+    ensureHrTables();
+    $id=trim((string)($b['id']??''));
+    $actionType=trim((string)($b['action_type']??'')); // 'Approved' or 'Rejected'
+    $adminNotes=trim((string)($b['admin_notes']??''));
+    if(!in_array($actionType,['Approved','Rejected'],true))fail(422,'Tindakan kelulusan tidak sah.');
+
+    $leave=query('SELECT * FROM hub_staff_leaves WHERE id=?',[$id])->fetch();
+    if(!$leave)fail(404,'Permohonan cuti tidak ditemui.');
+    if($leave['status']!=='Pending')fail(409,'Permohonan ini telah disemak terdahulu.');
+
+    $pdo->beginTransaction();
+    query('UPDATE hub_staff_leaves SET status=?,admin_notes=?,reviewed_by=?,reviewed_at=?,updated_at=? WHERE id=?',
+        [$actionType,$adminNotes,$u['id'],stamp(),stamp(),$id]);
+
+    if($actionType==='Approved'){
+        $year=(int)substr($leave['start_date'],0,4);
+        ensureStaffLeaveBalance($leave['user_id'],$year);
+        $type=$leave['leave_type'];
+        $days=(float)$leave['days_count'];
+        if(in_array($type,['annual','medical','hospitalisation','maternity'],true)){
+            query("UPDATE hub_leave_balances SET {$type}_used={$type}_used+?,updated_at=? WHERE user_id=? AND year=?",
+                [$days,stamp(),$leave['user_id'],$year]);
+        }
+        // Sync every date in range to attendance record with proper user role and Malaysia timezone
+        $targetUser=query('SELECT role FROM hub_users WHERE id=?',[$leave['user_id']])->fetch();
+        $uRole=$targetUser['role']??'teacher';
+        $typeLabel=['annual'=>'Cuti Tahunan','medical'=>'Cuti Sakit (MC)','hospitalisation'=>'Cuti Hospitalisasi','maternity'=>'Cuti Bersalin'][$type]??('Cuti '.ucfirst($type));
+        $curTs=strtotime($leave['start_date']);
+        $endTs=strtotime($leave['end_date']);
+        $guard=0;
+        while($curTs!==false && $endTs!==false && $curTs<=$endTs && $guard<120){
+            $dStr=date('Y-m-d',$curTs);
+            $attId=uid();
+            query('INSERT INTO hub_staff_attendance(id,user_id,user_name,user_role,work_date,clock_in,clock_out,duration_minutes,work_location,status,note,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
+                [$attId,$leave['user_id'],$leave['user_name'],$uRole,$dStr,$dStr.'T08:30:00+08:00',$dStr.'T17:00:00+08:00',0,'Cuti','Cuti',$typeLabel.' diluluskan: '.$leave['reason'],stamp(),stamp()]);
+            $curTs=strtotime('+1 day',$curTs);
+            $guard++;
+        }
+    }
+    audit('admin_leave_action',['id'=>$id,'status'=>$actionType],$u['id']);
+    $pdo->commit();
+    reply(['ok'=>true,'message'=>'Permohonan cuti telah berjaya '.($actionType==='Approved'?'diluluskan':'ditolak').'.']);
+}
+if($method==='POST' && $action==='admin_leave_balance_save') {
+    ensureHrTables();
+    $userId=trim((string)($b['user_id']??''));
+    $year=(int)($b['year']??date('Y'));
+    $annTotal=max(0,(float)($b['annual_total']??12));
+    $annCarry=max(0,(float)($b['annual_carry_forward']??0));
+    $carryMax=max(0,(float)($b['carry_forward_max']??5));
+    $medTotal=max(0,(float)($b['medical_total']??14));
+    $hospTotal=max(0,(float)($b['hospitalisation_total']??60));
+    $matTotal=max(0,(float)($b['maternity_total']??98));
+
+    $bal=query('SELECT id FROM hub_leave_balances WHERE user_id=? AND year=?',[$userId,$year])->fetch();
+    if($bal){
+        query('UPDATE hub_leave_balances SET annual_total=?,annual_carry_forward=?,carry_forward_max=?,medical_total=?,hospitalisation_total=?,maternity_total=?,updated_at=? WHERE id=?',
+            [$annTotal,$annCarry,$carryMax,$medTotal,$hospTotal,$matTotal,stamp(),$bal['id']]);
+    }else{
+        $id=uid();
+        query('INSERT INTO hub_leave_balances(id,user_id,year,annual_total,annual_used,annual_carry_forward,carry_forward_max,medical_total,medical_used,hospitalisation_total,hospitalisation_used,maternity_total,maternity_used,created_at,updated_at) VALUES(?,?,?,?,0.0,?,?,?,0.0,?,0.0,?,0.0,?,?)',
+            [$id,$userId,$year,$annTotal,$annCarry,$carryMax,$medTotal,$hospTotal,$matTotal,stamp(),stamp()]);
+    }
+    audit('admin_leave_balance_save',['user_id'=>$userId,'year'=>$year],$u['id']);
+    reply(['ok'=>true,'message'=>'Kuota cuti staf berjaya disimpan.']);
+}
+
+// Admin Medical Claims Management
+if($method==='GET' && $action==='admin_claims') {
+    ensureHrTables();
+    $year=(int)date('Y');
+    $users=query("SELECT id, name, role, email FROM hub_users WHERE role IN ('admin','teacher') ORDER BY name")->fetchAll();
+    foreach($users as $usr){ensureStaffClaimAllowance($usr['id'],$year);}
+    $claims=query('SELECT * FROM hub_medical_claims ORDER BY created_at DESC LIMIT 300')->fetchAll();
+    $allowances=query('SELECT b.*, u.name as user_name, u.role as user_role, u.email FROM hub_medical_allowance_balances b JOIN hub_users u ON b.user_id = u.id WHERE b.year=? ORDER BY u.name',[$year])->fetchAll();
+    reply(['claims'=>$claims,'allowances'=>$allowances,'users'=>$users]);
+}
+if($method==='POST' && $action==='admin_claim_action') {
+    ensureHrTables();
+    $id=trim((string)($b['id']??''));
+    $actionType=trim((string)($b['action_type']??'')); // 'Approved' or 'Rejected'
+    $adminNotes=trim((string)($b['admin_notes']??''));
+    if(!in_array($actionType,['Approved','Rejected'],true))fail(422,'Tindakan kelulusan tidak sah.');
+
+    $claim=query('SELECT * FROM hub_medical_claims WHERE id=?',[$id])->fetch();
+    if(!$claim)fail(404,'Tuntutan perubatan tidak ditemui.');
+    if($claim['status']!=='Pending')fail(409,'Tuntutan ini telah disemak terdahulu.');
+
+    $pdo->beginTransaction();
+    query('UPDATE hub_medical_claims SET status=?,admin_notes=?,reviewed_by=?,reviewed_at=?,updated_at=? WHERE id=?',
+        [$actionType,$adminNotes,$u['id'],stamp(),stamp(),$id]);
+
+    if($actionType==='Approved'){
+        $amt=(float)$claim['amount'];
+        $year=(int)$claim['year'];
+        ensureStaffClaimAllowance($claim['user_id'],$year);
+        query('UPDATE hub_medical_allowance_balances SET amount_used=amount_used+?, balance=GREATEST(0,balance-?), updated_at=? WHERE user_id=? AND year=?',
+            [$amt,$amt,stamp(),$claim['user_id'],$year]);
+    }
+    audit('admin_claim_action',['id'=>$id,'status'=>$actionType],$u['id']);
+    $pdo->commit();
+    reply(['ok'=>true,'message'=>'Tuntutan perubatan berjaya '.($actionType==='Approved'?'diluluskan dan ditolak daripada baki elaun staf':'ditolak').'.']);
+}
+if($method==='POST' && $action==='admin_claim_balance_save') {
+    ensureHrTables();
+    $userId=trim((string)($b['user_id']??''));
+    $year=(int)($b['year']??date('Y'));
+    $limit=max(0,(float)($b['annual_limit']??500.00));
+    $bal=query('SELECT id, amount_used FROM hub_medical_allowance_balances WHERE user_id=? AND year=?',[$userId,$year])->fetch();
+    if($bal){
+        $newBal=max(0,$limit-(float)$bal['amount_used']);
+        query('UPDATE hub_medical_allowance_balances SET annual_limit=?,balance=?,updated_at=? WHERE id=?',
+            [$limit,$newBal,stamp(),$bal['id']]);
+    }else{
+        $id=uid();
+        query('INSERT INTO hub_medical_allowance_balances(id,user_id,year,annual_limit,amount_used,balance,created_at,updated_at) VALUES(?,?,?,?,0.00,?,?,?)',
+            [$id,$userId,$year,$limit,$limit,stamp(),stamp()]);
+    }
+    audit('admin_claim_balance_save',['user_id'=>$userId,'limit'=>$limit],$u['id']);
+    reply(['ok'=>true,'message'=>'Had elaun perubatan tahunan staf berjaya dikemas kini.']);
+}
+
+// Admin Payroll Management
+if($method==='GET' && $action==='admin_payroll_data') {
+    ensureHrTables();
+    $users=query("SELECT id, name, role, email FROM hub_users WHERE role IN ('admin','teacher') ORDER BY name")->fetchAll();
+    $profiles=query('SELECT * FROM hub_staff_payroll_profiles')->fetchAll();
+    $runs=query('SELECT * FROM hub_payroll_runs ORDER BY `year_month` DESC')->fetchAll();
+    $payslips=query('SELECT * FROM hub_payslips ORDER BY `year_month` DESC, user_name ASC')->fetchAll();
+    $claimsPending=query("SELECT * FROM hub_medical_claims WHERE status='Approved' AND paid_via_payroll=0 ORDER BY treatment_date DESC")->fetchAll();
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    reply(['users'=>$users,'profiles'=>$profiles,'runs'=>$runs,'payslips'=>$payslips,'approvedClaims'=>$claimsPending,'settings'=>$settings]);
+}
+if($method==='POST' && $action==='admin_payroll_profile_save') {
+    ensureHrTables();
+    $userId=trim((string)($b['user_id']??''));
+    $targetUser=query('SELECT * FROM hub_users WHERE id=?',[$userId])->fetch();
+    if(!$targetUser)fail(404,'Staf tidak ditemui.');
+
+    $ic=trim((string)($b['ic_no']??''));
+    $epf=trim((string)($b['epf_no']??''));
+    $socso=trim((string)($b['socso_no']??''));
+    $tax=trim((string)($b['income_tax_no']??''));
+    $bank=trim((string)($b['bank_name']??''));
+    $bankAcc=trim((string)($b['bank_acc_no']??''));
+    $basic=max(0,(float)($b['basic_salary']??0.00));
+    $allowance=max(0,(float)($b['fixed_allowance']??0.00));
+    $epfEeRate=(float)($b['epf_employee_rate']??11.00);
+    $epfErRate=(float)($b['epf_employer_rate']??13.00);
+    $socsoCat=trim((string)($b['socso_category']??'cat1'));
+    $eisActive=!empty($b['eis_active'])?1:0;
+    $pcb=max(0,(float)($b['monthly_pcb']??0.00));
+
+    $existing=query('SELECT id FROM hub_staff_payroll_profiles WHERE user_id=?',[$userId])->fetch();
+    if($existing){
+        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,monthly_pcb=?,updated_at=? WHERE id=?',
+            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,stamp(),$existing['id']]);
+    }else{
+        $id=uid();
+        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,monthly_pcb,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,stamp(),stamp()]);
+    }
+    audit('admin_payroll_profile_save',['user_id'=>$userId,'basic'=>$basic],$u['id']);
+    reply(['ok'=>true,'message'=>'Profil gaji staf berjaya disimpan.']);
+}
+if($method==='POST' && $action==='admin_payroll_run_process') {
+    ensureHrTables();
+    $yearMonth=trim((string)($b['year_month']??date('Y-m')));
+    if(!preg_match('/^\d{4}-\d{2}$/',$yearMonth))fail(422,'Format bulan tidak sah (YYYY-MM).');
+
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    $payDay=str_pad((string)($settings['pay_day']??27),2,'0',STR_PAD_LEFT);
+    $payDate=$yearMonth.'-'.$payDay;
+    $cutStart=$yearMonth.'-01';
+    $lastDay=date('t',strtotime($cutStart));
+    $cutEnd=$yearMonth.'-'.$lastDay;
+
+    $users=query("SELECT * FROM hub_users WHERE role IN ('admin','teacher') AND active=1")->fetchAll();
+    if(empty($users))fail(422,'Tiada staf guru atau admin aktif untuk diproses.');
+
+    $pdo->beginTransaction();
+    // Unmark claims already linked to this month so re-running payroll preserves medical claim reimbursements
+    query('UPDATE hub_medical_claims SET paid_via_payroll=0, payroll_month=NULL WHERE payroll_month=?',[$yearMonth]);
+    query('DELETE FROM hub_payslips WHERE `year_month`=?',[$yearMonth]);
+    query('DELETE FROM hub_payroll_runs WHERE `year_month`=?',[$yearMonth]);
+
+    $runId=uid();
+    $totBasic=0.0;$totAllow=0.0;$totClaims=0.0;$totGross=0.0;
+    $totEpfEe=0.0;$totEpfEr=0.0;$totSocsoEe=0.0;$totSocsoEr=0.0;
+    $totEisEe=0.0;$totEisEr=0.0;$totPcb=0.0;$totNet=0.0;
+
+    foreach($users as $usr){
+        $prof=query('SELECT * FROM hub_staff_payroll_profiles WHERE user_id=?',[$usr['id']])->fetch();
+        $basic=$prof?(float)$prof['basic_salary']:0.00;
+        $allowance=$prof?(float)$prof['fixed_allowance']:0.00;
+        $epfEeRate=$prof?(float)$prof['epf_employee_rate']:11.00;
+        $epfErRate=$prof?(float)$prof['epf_employer_rate']:13.00;
+        $socsoCat=$prof?$prof['socso_category']:'cat1';
+        $eisActive=$prof?(bool)$prof['eis_active']:true;
+        $pcb=$prof?(float)$prof['monthly_pcb']:0.00;
+
+        // Approved claims not yet paid (or previously paid in this month)
+        $approvedClaims=query("SELECT id, user_id, user_name, year, treatment_date, clinic_name, amount, notes, status FROM hub_medical_claims WHERE user_id=? AND status='Approved' AND paid_via_payroll=0",[$usr['id']])->fetchAll();
+        $claimSum=0.0;
+        foreach($approvedClaims as $cl){$claimSum+=(float)$cl['amount'];}
+
+        $calc=calculateStatutoryContributions($basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive);
+        $gross=$calc['gross'];
+        $totDeductions=$calc['epf_employee']+$calc['socso_employee']+$calc['eis_employee']+$pcb;
+        $net=($gross+$claimSum)-$totDeductions;
+
+        $slipDetails=[
+            'user'=>publicUser($usr),
+            'profile'=>$prof?:[],
+            'claims'=>$approvedClaims,
+            'calculation'=>$calc,
+            'net'=>$net
+        ];
+
+        $slipId=uid();
+        query('INSERT INTO hub_payslips(id,run_id,user_id,user_name,user_role,`year_month`,pay_date,basic_salary,fixed_allowance,medical_claims,other_earnings,gross_salary,epf_employee,epf_employer,socso_employee,socso_employer,eis_employee,eis_employer,pcb_amount,total_deductions,net_salary,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$slipId,$runId,$usr['id'],$usr['name'],$usr['role'],$yearMonth,$payDate,$basic,$allowance,$claimSum,0.00,$gross,$calc['epf_employee'],$calc['epf_employer'],$calc['socso_employee'],$calc['socso_employer'],$calc['eis_employee'],$calc['eis_employer'],$pcb,$totDeductions,$net,json_encode($slipDetails,JSON_UNESCAPED_UNICODE),$cutEnd.'T00:00:00+08:00']);
+
+        // Mark claims as paid via payroll
+        foreach($approvedClaims as $cl){
+            query('UPDATE hub_medical_claims SET paid_via_payroll=1,payroll_month=?,updated_at=? WHERE id=?',[$yearMonth,stamp(),$cl['id']]);
+        }
+
+        $totBasic+=$basic;$totAllow+=$allowance;$totClaims+=$claimSum;$totGross+=$gross;
+        $totEpfEe+=$calc['epf_employee'];$totEpfEr+=$calc['epf_employer'];
+        $totSocsoEe+=$calc['socso_employee'];$totSocsoEr+=$calc['socso_employer'];
+        $totEisEe+=$calc['eis_employee'];$totEisEr+=$calc['eis_employer'];
+        $totPcb+=$pcb;$totNet+=$net;
+    }
+
+    query('INSERT INTO hub_payroll_runs(id,`year_month`,cutoff_start,cutoff_end,pay_date,total_basic,total_allowance,total_claims,total_gross,total_epf_employee,total_epf_employer,total_socso_employee,total_socso_employer,total_eis_employee,total_eis_employer,total_pcb,total_net,status,processed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$runId,$yearMonth,$cutStart,$cutEnd,$payDate,$totBasic,$totAllow,$totClaims,$totGross,$totEpfEe,$totEpfEr,$totSocsoEe,$totSocsoEr,$totEisEe,$totEisEr,$totPcb,$totNet,'Approved',$u['id'],stamp(),stamp()]);
+
+    audit('admin_payroll_run_process',['year_month'=>$yearMonth,'total_net'=>$totNet],$u['id']);
+    $pdo->commit();
+    reply(['ok'=>true,'runId'=>$runId,'message'=>'Penggajian bulan '.$yearMonth.' berjaya diproses dan slip gaji digital telah dijana.']);
+}
+if($method==='GET' && $action==='admin_payroll_export_kwsp') {
+    ensureHrTables();
+    $yearMonth=trim((string)($_GET['year_month']??date('Y-m')));
+    $settings=query('SELECT * FROM hub_hr_settings WHERE id=1')->fetch();
+    $slips=query('SELECT p.*, prof.ic_no, prof.epf_no FROM hub_payslips p LEFT JOIN hub_staff_payroll_profiles prof ON p.user_id = prof.user_id WHERE p.`year_month`=?',[$yearMonth])->fetchAll();
+    if(empty($slips))fail(404,'Tiada rekod gaji bagi bulan '.$yearMonth.'. Sila proses penggajian dahulu.');
+
+    $epfEmployerNo=str_pad(preg_replace('/[^0-9]/','',$settings['epf_employer_no']??'12345678'),8,'0',STR_PAD_LEFT);
+    $employerName=strtoupper(substr($settings['center_name']??'BERUNTUNG BRAINIAC',0,40));
+    $mY=date('mY',strtotime($yearMonth.'-01'));
+
+    $totEe=0;$totEr=0;$totWages=0;
+    $detailRows=[];
+    foreach($slips as $s){
+        $ic=preg_replace('/[^0-9]/','',$s['ic_no']??'');
+        $epfMember=preg_replace('/[^0-9]/','',$s['epf_no']??'');
+        $name=strtoupper(substr($s['user_name'],0,40));
+        $wage=(float)$s['gross_salary'];
+        $ee=(float)$s['epf_employee'];
+        $er=(float)$s['epf_employer'];
+        $totWages+=$wage;$totEe+=$ee;$totEr+=$er;
+        // Standard KWSP Borang A CSV layout
+        $detailRows[]=[$ic,$epfMember,$name,number_format($wage,2,'.',''),number_format($er,2,'.',''),number_format($ee,2,'.','')];
+    }
+
+    $cell=fn($v)=>'"'.str_replace('"','""',$v).'"';
+    $out="\uFEFF";
+    $out.="BORANG A - KWSP (i-Akaun Upload File)\r\n";
+    $out.="NO MAJIKAN:,".$cell($epfEmployerNo).",NAMA MAJIKAN:,".$cell($employerName).",BULAN CARUMAN:,".$cell($mY)."\r\n";
+    $out.="JUMLAH PEKERJA:,".count($slips).",JUMLAH UPAH:,".number_format($totWages,2,'.','').",JUMLAH CARUMAN MAJIKAN:,".number_format($totEr,2,'.','').",JUMLAH CARUMAN PEKERJA:,".number_format($totEe,2,'.','').",JUMLAH BESAR:,".number_format($totEr+$totEe,2,'.','')."\r\n\r\n";
+    $out.="NO KAD PENGENALAN,NO AHLI KWSP,NAMA PEKERJA,JUMLAH UPAH (RM),CARUMAN MAJIKAN (RM),CARUMAN PEKERJA (RM)\r\n";
+    foreach($detailRows as $r){
+        $out.=implode(',',array_map($cell,$r))."\r\n";
+    }
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="KWSP_BorangA_'.$epfEmployerNo.'_'.$mY.'.csv"');
+    echo $out;
+    exit;
+}
+
+// User accounts management
 if($method==='GET' && $action==='users') reply(['users'=>array_map('publicUser',query('SELECT * FROM hub_users ORDER BY name')->fetchAll())]);
 if($method==='POST' && $action==='users') {
     [$email,$name,$role]=identity($b);$id=$b['id']??'';$active=($b['active']??true)?1:0;
