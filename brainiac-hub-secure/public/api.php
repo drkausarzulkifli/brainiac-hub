@@ -692,4 +692,128 @@ if($method==='POST' && $action==='users') {
     }
     audit('user_updated',['id'=>$id,'role'=>$role,'active'=>$active,'password_reset'=>(bool)$hash]);$pdo->commit();reply(['ok'=>true]);
 }
+
+// Full Database Backup (Admin only)
+$backupTables=[
+    'hub_users','hub_state','hub_audit','hub_rate','hub_writes',
+    'hub_hr_settings','hub_staff_attendance','hub_leave_balances','hub_staff_leaves',
+    'hub_medical_allowance_balances','hub_medical_claims',
+    'hub_staff_payroll_profiles','hub_payroll_runs','hub_payslips'
+];
+if($method==='GET' && $action==='admin_backup_summary') {
+    ensureHrTables();
+    $counts=[];$totalRows=0;
+    foreach($backupTables as $tbl){
+        $c=(int)query('SELECT COUNT(*) FROM `'.$tbl.'`')->fetchColumn();
+        $counts[$tbl]=$c;$totalRows+=$c;
+    }
+    $stateRow=query('SELECT revision FROM hub_state WHERE id=1')->fetch();
+    $my=malaysiaNow();
+    reply([
+        'generated_at'=>$my['iso'],
+        'state_revision'=>$stateRow?(int)$stateRow['revision']:0,
+        'total_tables'=>count($backupTables),
+        'total_rows'=>$totalRows,
+        'counts'=>$counts
+    ]);
+}
+if($method==='POST' && $action==='admin_backup_export') {
+    limit('backup:'.$u['id'],20);
+    ensureHrTables();
+    $format=strtolower(trim((string)($b['format']??'sql')));
+    if(!in_array($format,['sql','json'],true))fail(422,'Format sandaran tidak sah. Pilih sql atau json.');
+    if(function_exists('set_time_limit'))@set_time_limit(120);
+    $my=malaysiaNow();
+    try{$tz=new DateTimeZone('Asia/Kuala_Lumpur');$fileStamp=(new DateTimeImmutable('now',$tz))->format('Ymd_His');}catch(Throwable){$fileStamp=gmdate('Ymd_His');}
+    audit('admin_backup_export',['format'=>$format,'tables'=>count($backupTables)],$u['id']);
+    for($lvl=ob_get_level();$lvl>0;$lvl--){if(!@ob_end_clean())break;}
+    header('X-Content-Type-Options: nosniff');
+    $qId=fn(string $id): string => '`'.str_replace('`','``',$id).'`';
+    if($format==='json'){
+        header('Content-Type: application/json; charset=utf-8');
+        header('Content-Disposition: attachment; filename="BrainiacHub_Backup_'.$fileStamp.'.json"');
+        $meta=[
+            'app'=>'Brainiac Hub',
+            'exported_at'=>$my['iso'],
+            'timezone'=>'Asia/Kuala_Lumpur',
+            'exported_by'=>['id'=>$u['id'],'name'=>$u['name'],'email'=>$u['email']],
+            'note'=>'Untuk pemulihan penuh termasuk kata laluan log masuk, gunakan fail sandaran .sql di phpMyAdmin.',
+            'tables'=>$backupTables
+        ];
+        echo "{\n\"meta\": ".json_encode($meta,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR).",\n\"tables\": {\n";
+        $tTotal=count($backupTables);
+        foreach($backupTables as $tIdx=>$tbl){
+            echo json_encode($tbl,JSON_THROW_ON_ERROR).": [\n";
+            $stmt=query('SELECT * FROM '.$qId($tbl));
+            $first=true;
+            while($row=$stmt->fetch(PDO::FETCH_ASSOC)){
+                if($tbl==='hub_users'&&array_key_exists('password_hash',$row))$row['password_hash']='[REDACTED]';
+                if(!$first)echo ",\n";
+                echo json_encode($row,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+                $first=false;
+            }
+            $stmt->closeCursor();
+            echo "\n]".($tIdx<$tTotal-1?",\n":"\n");
+        }
+        echo "}\n}\n";
+        exit;
+    }
+    $driver=$pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+    header('Content-Type: application/sql; charset=utf-8');
+    header('Content-Disposition: attachment; filename="BrainiacHub_Backup_'.$fileStamp.'.sql"');
+    echo "-- Brainiac Hub Full Database Backup\n";
+    echo "-- Generated: ".$my['iso']." (Asia/Kuala_Lumpur)\n";
+    echo "-- Exported by: ".str_replace(["\r","\n"],' ',$u['name'])." <".str_replace(["\r","\n"],' ',$u['email']).">\n";
+    echo "-- Driver: ".$driver."\n\n";
+    if($driver==='mysql'){
+        echo "SET NAMES utf8mb4;\n";
+        echo "SET FOREIGN_KEY_CHECKS = 0;\n";
+        echo "SET SQL_MODE = 'NO_AUTO_VALUE_ON_ZERO';\n\n";
+    }
+    $qVal=function($val) use ($pdo): string {
+        if($val===null)return 'NULL';
+        if(is_int($val)||is_float($val))return (string)$val;
+        return $pdo->quote((string)$val);
+    };
+    foreach($backupTables as $tbl){
+        echo "-- --------------------------------------------------------\n";
+        echo "-- Table: ".$tbl."\n";
+        echo "-- --------------------------------------------------------\n";
+        if($driver==='mysql'){
+            $createRow=query('SHOW CREATE TABLE '.$qId($tbl))->fetch(PDO::FETCH_NUM);
+            if($createRow&&isset($createRow[1])){
+                echo "DROP TABLE IF EXISTS ".$qId($tbl).";\n";
+                echo $createRow[1].";\n\n";
+            }
+        }else{
+            $createSql=query("SELECT sql FROM sqlite_master WHERE type='table' AND name=?",[$tbl])->fetchColumn();
+            if($createSql){
+                echo "DROP TABLE IF EXISTS ".$qId($tbl).";\n";
+                echo $createSql.";\n\n";
+            }
+        }
+        $stmt=query('SELECT * FROM '.$qId($tbl));
+        $cols=null;$batch=[];$batchBytes=0;
+        $flushBatch=function() use (&$batch,&$batchBytes,&$cols,$tbl,$qId): void {
+            if(!$batch)return;
+            echo "INSERT INTO ".$qId($tbl)." (".implode(', ',array_map($qId,$cols)).") VALUES\n".implode(",\n",$batch).";\n";
+            $batch=[];$batchBytes=0;
+        };
+        while($row=$stmt->fetch(PDO::FETCH_ASSOC)){
+            if($cols===null)$cols=array_keys($row);
+            $vals=[];
+            foreach($cols as $col)$vals[]=$qVal($row[$col]);
+            $tuple='('.implode(', ',$vals).')';
+            if($batch&&($batchBytes+strlen($tuple)>524288||count($batch)>=50))$flushBatch();
+            $batch[]=$tuple;
+            $batchBytes+=strlen($tuple);
+        }
+        $stmt->closeCursor();
+        $flushBatch();
+        echo "\n";
+    }
+    if($driver==='mysql')echo "SET FOREIGN_KEY_CHECKS = 1;\n";
+    exit;
+}
+
 fail(404,'Tindakan tidak ditemui.');

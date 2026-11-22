@@ -45,6 +45,7 @@ async function enterApp(user){
  document.querySelector('.user b').textContent=user.name;
  document.querySelectorAll('.user .avatar,.header-right .avatar').forEach(el=>el.textContent=user.name.split(' ').map(n=>n[0]).slice(0,2).join(''));
  document.querySelector('#account-users').hidden=user.role!=='admin';
+ const backupBtn=document.querySelector('#account-backup');if(backupBtn)backupBtn.hidden=user.role!=='admin';
  if(typeof fetchClockStatus==='function'&&user.role!=='therapist')fetchClockStatus();else{const w=document.querySelector('#header-clock-widget');if(w)w.innerHTML=''}
  resetIdleTimer();
 }
@@ -70,9 +71,54 @@ function accountForm(id=''){
  const u=accountList.find(u=>u.id===id)||{id:'',name:'',email:'',role:'teacher',active:1};
  dialog.close();open(u.id?'Ubah akaun':'Tambah akaun',`<form id="account-form"><input type="hidden" name="id" value="${esc(u.id)}"><label class="field">Nama<input name="name" required maxlength="120" value="${esc(u.name)}"></label><label class="field">Emel login<input name="email" type="email" required maxlength="190" autocomplete="off" value="${esc(u.email)}"></label><label class="field">Peranan<select name="role">${Object.entries(demoRoles).map(([v,label])=>`<option value="${v}" ${u.role===v?'selected':''}>${label}</option>`).join('')}</select></label><label class="field">Kata laluan sementara${u.id?' (kosongkan untuk kekalkan)':''}<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="72" ${u.id?'':'required'}></label><p>Pengguna perlu menukar kata laluan sementara pada login pertama. Kongsikan melalui saluran peribadi.</p><label><input type="checkbox" name="active" ${Number(u.active)?'checked':''}> Akaun aktif</label><p id="account-error" role="alert"></p><div class="dialog-actions"><button class="secondary" type="button" data-discard-dialog>Batal</button><button class="primary" type="submit">Simpan akaun</button></div></form>`);
 }
+async function loadBackupSummary(selector){
+ const el=document.querySelector(selector);if(!el)return;
+ try{
+  const s=await api('admin_backup_summary');
+  const current=document.querySelector(selector);if(!current)return;
+  current.textContent=`${s.total_tables} jadual MySQL • ${s.total_rows} baris rekod keseluruhan • Versi EHR semakan ${s.state_revision}`;
+ }catch(err){
+  const current=document.querySelector(selector);if(current)current.textContent=err.message||'Ringkasan pangkalan data tidak tersedia.';
+ }
+}
+function openBackupDialog(){
+ open('Sandaran Penuh Pangkalan Data',`<p class="dialog-copy">Muat turun salinan lengkap kesemua 14 jadual pangkalan data MySQL (rekod klinikal EHR, akaun pengguna, kehadiran GPS, cuti &amp; MC, tuntutan perubatan, penggajian dan log audit).</p><p class="field-hint" id="dialog-backup-summary">Memuatkan ringkasan jadual pangkalan data…</p><div class="records"><div class="record"><div><h3>Sandaran Pemulihan Penuh (.sql)</h3><p>Format terbaik untuk pemulihan semula terus melalui phpMyAdmin → Import sekiranya berlaku kehilangan data.</p></div><button class="primary" type="button" data-backup-format="sql">Muat Turun (.sql)</button></div><div class="record"><div><h3>Arkib Data JSON (.json)</h3><p>Salinan berstruktur untuk rujukan atau arkib dalaman (kata laluan log masuk disunting keluar).</p></div><button class="secondary" type="button" data-backup-format="json">Muat Turun (.json)</button></div></div><p class="field-hint">Simpan fail sandaran secara peribadi dan sulit. Jangan muat naik fail ini ke folder awam pelayan.</p><div class="dialog-actions"><button class="secondary" type="button" data-cancel>Tutup</button></div>`);
+ loadBackupSummary('#dialog-backup-summary');
+}
+async function downloadFullBackup(format,button){
+ if(currentUser?.role!=='admin'){notify('Hanya Admin boleh memuat turun sandaran penuh.');return}
+ const originalText=button?button.textContent:'';
+ if(button){button.disabled=true;button.textContent='Menjana sandaran…'}
+ try{
+  const response=await fetch('/api.php?action=admin_backup_export',{method:'POST',credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-CSRF-Token':csrfToken},body:JSON.stringify({format}),signal:AbortSignal.timeout(120000)});
+  if(!response.ok){
+   let errMsg='Sandaran gagal dijana.';
+   try{const j=await response.json();if(j?.error)errMsg=j.error}catch{}
+   if(response.status===401)showLogin('Sesi tamat. Log masuk semula untuk meneruskan.');
+   if(response.status===403){try{const session=await api('session');csrfToken=session.csrf;if(!session.user)showLogin('Sesi tamat. Log masuk semula.')}catch{}}
+   throw Error(errMsg);
+  }
+  const cd=response.headers.get('Content-Disposition')||'';
+  const match=cd.match(/filename="([^"]+)"/i);
+  const filename=match?match[1]:('BrainiacHub_Backup.'+format);
+  const blob=await response.blob();
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),2000);
+  notify('Sandaran penuh berjaya dimuat turun: '+filename);
+  if(page==='reports')loadBackupSummary('#reports-backup-summary');
+  if(document.querySelector('#dialog-backup-summary'))loadBackupSummary('#dialog-backup-summary');
+ }catch(err){
+  notify(err.message||'Sandaran gagal dimuat turun.');
+ }finally{
+  if(button&&button.isConnected){button.disabled=false;button.textContent=originalText}
+ }
+}
 document.addEventListener('click',async e=>{
  const b=e.target.closest('button');if(!b)return;
  if(b.id==='account-users'){if(hasPageChanges()||dialogIsDirty()){notify('Simpan atau buang perubahan dahulu.');return}await accountUsers()}
+ if(b.id==='account-backup'){if(hasPageChanges()||dialogIsDirty()){notify('Simpan atau buang perubahan dahulu.');return}openBackupDialog()}
+ if(b.dataset.backupFormat){await downloadFullBackup(b.dataset.backupFormat,b)}
  if(b.id==='new-account'||b.dataset.accountEdit)accountForm(b.dataset.accountEdit||'');
  if(b.id==='account-password'){if(hasPageChanges()||dialogIsDirty()){notify('Simpan atau buang perubahan dahulu.');return}document.body.dataset.auth='password';document.querySelector('#password-cancel').textContent='Kembali';document.querySelector('#password-current').focus()}
  if(b.id==='password-cancel'){if(Number(currentUser?.must_change)){await api('logout',{});location.replace('/')}else{document.querySelector('#password-form').reset();document.body.dataset.auth='ready'}}

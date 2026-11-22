@@ -12,7 +12,7 @@ function demoActionModule(el){
  if(d.bookingWork)return demoBookingModule(plannerBookings().find(b=>b.key===d.bookingWork));
  if(d.session||d.finish){const s=data.sessions.find(s=>s.id===Number(d.session||d.finish));return s?.programme==='EIP'?'class-notes':'therapy-sessions'}
  if(['reset','confirm-reset'].includes(id))return 'staff';
- if(id==='notifications')return 'plans';if(id==='export')return 'reports';
+ if(id==='notifications')return 'plans';if(id==='export'||id==='account-backup'||d.backupFormat)return 'reports';
  if(d.viewStaff||d.editStaff)return 'staff';
  if(d.newStudy!==undefined||d.editStudy||d.plan)return 'plans';
  if(d.historyAssessment||d.slotAssessment||d.assessmentType||d.assessmentOpen||d.assessment||id.startsWith('assessment-'))return 'assessments';
