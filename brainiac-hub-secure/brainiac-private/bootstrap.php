@@ -203,6 +203,7 @@ function ensureHrTables(): void {
         socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
         eis_active INT NOT NULL DEFAULT 1,
         monthly_pcb DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        other_deductions_json LONGTEXT DEFAULT NULL,
         created_at VARCHAR(30) NOT NULL,
         updated_at VARCHAR(30) NOT NULL
     )$engine;");
@@ -224,6 +225,7 @@ function ensureHrTables(): void {
         total_eis_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_eis_employer DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_pcb DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_other_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_net DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         status VARCHAR(20) NOT NULL DEFAULT 'Draft',
         processed_by VARCHAR(36) NOT NULL,
@@ -251,11 +253,34 @@ function ensureHrTables(): void {
         eis_employee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         eis_employer DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         pcb_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        other_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         total_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         net_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         details_json LONGTEXT NOT NULL,
         created_at VARCHAR(30) NOT NULL
     )$engine;");
+
+    $hasCol=function(string $table, string $col) use ($pdo, $driver): bool {
+        try{
+            if($driver==='mysql'){
+                $rows=$pdo->query("SHOW COLUMNS FROM `{$table}`")->fetchAll();
+                foreach($rows as $r){if(strcasecmp((string)($r['Field']??''),$col)===0)return true;}
+                return false;
+            }
+            $rows=$pdo->query("PRAGMA table_info(`{$table}`)")->fetchAll();
+            foreach($rows as $r){if(strcasecmp((string)($r['name']??''),$col)===0)return true;}
+            return false;
+        }catch(Throwable){return false;}
+    };
+    if(!$hasCol('hub_staff_payroll_profiles','other_deductions_json')){
+        $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN other_deductions_json LONGTEXT DEFAULT NULL');
+    }
+    if(!$hasCol('hub_payroll_runs','total_other_deductions')){
+        $run('ALTER TABLE hub_payroll_runs ADD COLUMN total_other_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    }
+    if(!$hasCol('hub_payslips','other_deductions')){
+        $run('ALTER TABLE hub_payslips ADD COLUMN other_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    }
 }
 function haversineDistanceMeters(float $lat1, float $lon1, float $lat2, float $lon2): int {
     $earthRadius=6371000;

@@ -543,16 +543,41 @@ if($method==='POST' && $action==='admin_payroll_profile_save') {
     $eisActive=!empty($b['eis_active'])?1:0;
     $pcb=max(0,(float)($b['monthly_pcb']??0.00));
 
+    $rawOther=$b['other_deductions']??[];
+    if(is_string($rawOther)){
+        $trimmed=trim($rawOther);
+        if($trimmed===''){
+            $rawOther=[];
+        }else{
+            $decoded=json_decode($trimmed,true);
+            $rawOther=is_array($decoded)?$decoded:null;
+        }
+    }
+    if(!is_array($rawOther))fail(422,'Format potongan lain-lain tidak sah.');
+    if(count($rawOther)>20)fail(422,'Maksimum 20 item potongan lain-lain dibenarkan.');
+    $otherDeductions=[];
+    foreach($rawOther as $item){
+        if(!is_array($item))fail(422,'Item potongan lain-lain tidak sah.');
+        $desc=trim((string)($item['description']??''));
+        $amt=round((float)($item['amount']??0),2);
+        if($desc==='' && $amt==0.0)continue;
+        if($desc==='')fail(422,'Sila masukkan penerangan bagi setiap potongan lain-lain.');
+        if(strlen($desc)>150)fail(422,'Penerangan potongan lain-lain maksimum 150 aksara.');
+        if($amt<=0)fail(422,'Jumlah potongan lain-lain mesti lebih daripada RM0.00.');
+        $otherDeductions[]=['description'=>$desc,'amount'=>$amt];
+    }
+    $otherJson=json_encode($otherDeductions,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+
     $existing=query('SELECT id FROM hub_staff_payroll_profiles WHERE user_id=?',[$userId])->fetch();
     if($existing){
-        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,monthly_pcb=?,updated_at=? WHERE id=?',
-            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,stamp(),$existing['id']]);
+        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,monthly_pcb=?,other_deductions_json=?,updated_at=? WHERE id=?',
+            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,$otherJson,stamp(),$existing['id']]);
     }else{
         $id=uid();
-        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,monthly_pcb,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,stamp(),stamp()]);
+        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,monthly_pcb,other_deductions_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,$otherJson,stamp(),stamp()]);
     }
-    audit('admin_payroll_profile_save',['user_id'=>$userId,'basic'=>$basic],$u['id']);
+    audit('admin_payroll_profile_save',['user_id'=>$userId,'basic'=>$basic,'other_deductions_count'=>count($otherDeductions)],$u['id']);
     reply(['ok'=>true,'message'=>'Profil gaji staf berjaya disimpan.']);
 }
 if($method==='POST' && $action==='admin_payroll_run_process') {
@@ -579,7 +604,7 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
     $runId=uid();
     $totBasic=0.0;$totAllow=0.0;$totClaims=0.0;$totGross=0.0;
     $totEpfEe=0.0;$totEpfEr=0.0;$totSocsoEe=0.0;$totSocsoEr=0.0;
-    $totEisEe=0.0;$totEisEr=0.0;$totPcb=0.0;$totNet=0.0;
+    $totEisEe=0.0;$totEisEr=0.0;$totPcb=0.0;$totOtherDed=0.0;$totNet=0.0;
 
     foreach($users as $usr){
         $prof=query('SELECT * FROM hub_staff_payroll_profiles WHERE user_id=?',[$usr['id']])->fetch();
@@ -591,6 +616,19 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         $eisActive=$prof?(bool)$prof['eis_active']:true;
         $pcb=$prof?(float)$prof['monthly_pcb']:0.00;
 
+        $rawOther=json_decode((string)($prof['other_deductions_json']??'[]'),true);
+        $otherItems=[];$otherDedSum=0.0;
+        if(is_array($rawOther)){
+            foreach($rawOther as $od){
+                $desc=trim((string)($od['description']??''));
+                $amt=round((float)($od['amount']??0),2);
+                if($desc!=='' && $amt>0){
+                    $otherItems[]=['description'=>$desc,'amount'=>$amt];
+                    $otherDedSum=round($otherDedSum+$amt,2);
+                }
+            }
+        }
+
         // Approved claims not yet paid (or previously paid in this month)
         $approvedClaims=query("SELECT id, user_id, user_name, year, treatment_date, clinic_name, amount, notes, status FROM hub_medical_claims WHERE user_id=? AND status='Approved' AND paid_via_payroll=0",[$usr['id']])->fetchAll();
         $claimSum=0.0;
@@ -598,20 +636,21 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
 
         $calc=calculateStatutoryContributions($basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive);
         $gross=$calc['gross'];
-        $totDeductions=$calc['epf_employee']+$calc['socso_employee']+$calc['eis_employee']+$pcb;
-        $net=($gross+$claimSum)-$totDeductions;
+        $totDeductions=round($calc['epf_employee']+$calc['socso_employee']+$calc['eis_employee']+$pcb+$otherDedSum,2);
+        $net=round(($gross+$claimSum)-$totDeductions,2);
 
         $slipDetails=[
             'user'=>publicUser($usr),
             'profile'=>$prof?:[],
             'claims'=>$approvedClaims,
+            'other_deductions'=>$otherItems,
             'calculation'=>$calc,
             'net'=>$net
         ];
 
         $slipId=uid();
-        query('INSERT INTO hub_payslips(id,run_id,user_id,user_name,user_role,`year_month`,pay_date,basic_salary,fixed_allowance,medical_claims,other_earnings,gross_salary,epf_employee,epf_employer,socso_employee,socso_employer,eis_employee,eis_employer,pcb_amount,total_deductions,net_salary,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [$slipId,$runId,$usr['id'],$usr['name'],$usr['role'],$yearMonth,$payDate,$basic,$allowance,$claimSum,0.00,$gross,$calc['epf_employee'],$calc['epf_employer'],$calc['socso_employee'],$calc['socso_employer'],$calc['eis_employee'],$calc['eis_employer'],$pcb,$totDeductions,$net,json_encode($slipDetails,JSON_UNESCAPED_UNICODE),$cutEnd.'T00:00:00+08:00']);
+        query('INSERT INTO hub_payslips(id,run_id,user_id,user_name,user_role,`year_month`,pay_date,basic_salary,fixed_allowance,medical_claims,other_earnings,gross_salary,epf_employee,epf_employer,socso_employee,socso_employer,eis_employee,eis_employer,pcb_amount,other_deductions,total_deductions,net_salary,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$slipId,$runId,$usr['id'],$usr['name'],$usr['role'],$yearMonth,$payDate,$basic,$allowance,$claimSum,0.00,$gross,$calc['epf_employee'],$calc['epf_employer'],$calc['socso_employee'],$calc['socso_employer'],$calc['eis_employee'],$calc['eis_employer'],$pcb,$otherDedSum,$totDeductions,$net,json_encode($slipDetails,JSON_UNESCAPED_UNICODE),$cutEnd.'T00:00:00+08:00']);
 
         // Mark claims as paid via payroll
         foreach($approvedClaims as $cl){
@@ -622,13 +661,13 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         $totEpfEe+=$calc['epf_employee'];$totEpfEr+=$calc['epf_employer'];
         $totSocsoEe+=$calc['socso_employee'];$totSocsoEr+=$calc['socso_employer'];
         $totEisEe+=$calc['eis_employee'];$totEisEr+=$calc['eis_employer'];
-        $totPcb+=$pcb;$totNet+=$net;
+        $totPcb+=$pcb;$totOtherDed+=$otherDedSum;$totNet+=$net;
     }
 
-    query('INSERT INTO hub_payroll_runs(id,`year_month`,cutoff_start,cutoff_end,pay_date,total_basic,total_allowance,total_claims,total_gross,total_epf_employee,total_epf_employer,total_socso_employee,total_socso_employer,total_eis_employee,total_eis_employer,total_pcb,total_net,status,processed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [$runId,$yearMonth,$cutStart,$cutEnd,$payDate,$totBasic,$totAllow,$totClaims,$totGross,$totEpfEe,$totEpfEr,$totSocsoEe,$totSocsoEr,$totEisEe,$totEisEr,$totPcb,$totNet,'Approved',$u['id'],stamp(),stamp()]);
+    query('INSERT INTO hub_payroll_runs(id,`year_month`,cutoff_start,cutoff_end,pay_date,total_basic,total_allowance,total_claims,total_gross,total_epf_employee,total_epf_employer,total_socso_employee,total_socso_employer,total_eis_employee,total_eis_employer,total_pcb,total_other_deductions,total_net,status,processed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$runId,$yearMonth,$cutStart,$cutEnd,$payDate,$totBasic,$totAllow,$totClaims,$totGross,$totEpfEe,$totEpfEr,$totSocsoEe,$totSocsoEr,$totEisEe,$totEisEr,$totPcb,$totOtherDed,$totNet,'Approved',$u['id'],stamp(),stamp()]);
 
-    audit('admin_payroll_run_process',['year_month'=>$yearMonth,'total_net'=>$totNet],$u['id']);
+    audit('admin_payroll_run_process',['year_month'=>$yearMonth,'total_net'=>$totNet,'total_other_deductions'=>$totOtherDed],$u['id']);
     $pdo->commit();
     reply(['ok'=>true,'runId'=>$runId,'message'=>'Penggajian bulan '.$yearMonth.' berjaya diproses dan slip gaji digital telah dijana.']);
 }

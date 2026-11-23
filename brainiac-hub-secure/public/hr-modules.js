@@ -1352,6 +1352,29 @@ async function downloadKwspBorangA(yearMonth){
   }
 }
 
+function parseOtherDeductions(raw){
+  if(Array.isArray(raw))return raw;
+  try{
+    const parsed=JSON.parse(raw||'[]');
+    return Array.isArray(parsed)?parsed:[];
+  }catch{return [];}
+}
+
+function renderOtherDeductionRow(item={}){
+  const amt=Number(item.amount||0);
+  return `
+    <div class="other-deduction-row">
+      <label class="field other-ded-desc-wrap">Penerangan Potongan <span style="color:var(--red)">*</span>
+        <input type="text" class="other-ded-desc" maxlength="150" placeholder="Contoh: Pendahuluan gaji / Pinjaman / Zakat" value="${esc(item.description||'')}" required>
+      </label>
+      <label class="field">Jumlah (RM) <span style="color:var(--red)">*</span>
+        <input type="number" class="other-ded-amt" step="0.01" min="0.01" placeholder="0.00" value="${amt>0?amt.toFixed(2):''}" required>
+      </label>
+      <button class="secondary mini-btn btn-remove-other-ded" type="button" title="Buang potongan ini" aria-label="Buang potongan ini">${icon('x')}</button>
+    </div>
+  `;
+}
+
 function renderAdminPayrollProfilesSection(){
   const users=adminPayrollDataState.users;
   const profiles=adminPayrollDataState.profiles;
@@ -1360,6 +1383,8 @@ function renderAdminPayrollProfilesSection(){
     const prof=profiles.find(p=>p.user_id===u.id)||{};
     const basic=Number(prof.basic_salary||0);
     const allow=Number(prof.fixed_allowance||0);
+    const otherList=parseOtherDeductions(prof.other_deductions_json).filter(d=>Number(d.amount)>0);
+    const otherTot=otherList.reduce((acc,d)=>acc+Number(d.amount||0),0);
     return `
       <tr>
         <td>${i+1}</td>
@@ -1369,7 +1394,10 @@ function renderAdminPayrollProfilesSection(){
         <td>${esc(prof.bank_name||'-')} ${prof.bank_acc_no?`<small style="display:block;color:var(--muted)">${esc(prof.bank_acc_no)}</small>`:''}</td>
         <td><b>${formatRM(basic)}</b></td>
         <td>${formatRM(allow)}</td>
-        <td><b>${formatRM(basic+allow)}</b></td>
+        <td>
+          <b>${formatRM(basic+allow)}</b>
+          ${otherTot>0?`<small style="display:block;color:var(--red)">Potongan lain: -${formatRM(otherTot)} (${otherList.length})</small>`:''}
+        </td>
         <td>
           <button class="secondary mini-btn" type="button" data-edit-payroll-prof="${esc(u.id)}">${icon('clipboard')} Kemas Kini</button>
         </td>
@@ -1382,7 +1410,7 @@ function renderAdminPayrollProfilesSection(){
       <div class="panel-head">
         <div>
           <h2>Profil Gaji & Butiran Caruman Staf</h2>
-          <p>Konfigurasi gaji asas, elaun tetap, nombor akaun bank, dan nombor statutori (KWSP, PERKESO, LHDN) bagi setiap cikgu dan admin.</p>
+          <p>Konfigurasi gaji asas, elaun tetap, potongan bukan statutori, nombor akaun bank, dan nombor statutori (KWSP, PERKESO, LHDN) bagi setiap cikgu dan admin.</p>
         </div>
       </div>
       <div class="att-table-wrap">
@@ -1413,6 +1441,7 @@ function openEditPayrollProfileDialog(userId){
   const users=adminPayrollDataState.users;
   const targetUser=users.find(u=>u.id===userId);
   const existing=adminPayrollDataState.profiles.find(p=>p.user_id===userId)||{};
+  const otherList=parseOtherDeductions(existing.other_deductions_json);
 
   open(`Profil Gaji — ${esc(targetUser?.name||'')}`,`
     <form id="admin-payroll-profile-form">
@@ -1490,6 +1519,19 @@ function openEditPayrollProfileDialog(userId){
         <input type="checkbox" name="eis_active" value="1" ${(existing.eis_active!==0)?'checked':''}>
         <span>Caruman Sistem Insurans Pekerjaan (SIP / EIS) Aktif (0.2% Pekerja / 0.2% Majikan)</span>
       </label>
+
+      <div class="other-deductions-box">
+        <div class="other-deductions-head">
+          <div>
+            <div style="font-size:12px;font-weight:700;color:var(--ink)">Potongan Lain-lain (Bukan Statutori)</div>
+            <small style="font-size:11px;color:var(--muted)">Contoh: pendahuluan gaji, pinjaman staf, cuti tanpa gaji, zakat atau yuran koperasi.</small>
+          </div>
+          <button class="secondary mini-btn" type="button" id="btn-add-other-deduction">${icon('plus')} Potongan Lain-lain</button>
+        </div>
+        <div class="other-deductions-list" id="other-deductions-list">
+          ${otherList.length?otherList.map(renderOtherDeductionRow).join(''):'<p id="other-ded-empty" style="margin:0;font-size:11px;color:var(--muted)">Tiada potongan lain-lain ditetapkan.</p>'}
+        </div>
+      </div>
 
       <p id="admin-payroll-prof-error" role="alert" style="color:var(--red);font-size:12px;margin:8px 0"></p>
       <div class="dialog-actions">
@@ -1580,6 +1622,19 @@ async function downloadPayslipPdf(slip){
     rowLine(rightX,yRight,'Caruman PERKESO Pekerja',formatRM(slip.socso_employee));yRight+=6;
     rowLine(rightX,yRight,'Caruman SIP (EIS) Pekerja',formatRM(slip.eis_employee));yRight+=6;
     if(Number(slip.pcb_amount)>0){rowLine(rightX,yRight,'Potongan Cukai Bulanan (PCB)',formatRM(slip.pcb_amount));yRight+=6;}
+    const otherDeds=parseOtherDeductions(details.other_deductions);
+    if(otherDeds.length){
+      for(const od of otherDeds){
+        doc.setFont('NotoSans','normal');
+        const lines=doc.splitTextToSize(String(od.description||'Potongan Lain-lain'),colW-28);
+        doc.text(lines,rightX+2,yRight);
+        doc.setFont('NotoSans','bold');
+        doc.text(formatRM(od.amount),rightX+colW-2,yRight,{align:'right'});
+        yRight+=Math.max(1,lines.length)*4.5+1.5;
+      }
+    }else if(Number(slip.other_deductions)>0){
+      rowLine(rightX,yRight,'Potongan Lain-lain',formatRM(slip.other_deductions));yRight+=6;
+    }
 
     y=Math.max(yLeft,yRight)+4;
     doc.setDrawColor(210,220,224);doc.setLineWidth(0.3);
@@ -1711,6 +1766,15 @@ function openPayslipModal(slipId){
               <b>${formatRM(slip.pcb_amount)}</b>
             </div>
           `:''}
+          ${(()=>{const otherDeds=parseOtherDeductions(details.other_deductions);return otherDeds.length?otherDeds.map(od=>`
+            <div class="payslip-row">
+              <span>${esc(od.description||'Potongan Lain-lain')}</span>
+              <b>${formatRM(od.amount)}</b>
+            </div>`).join(''):(Number(slip.other_deductions)>0?`
+            <div class="payslip-row">
+              <span>Potongan Lain-lain</span>
+              <b>${formatRM(slip.other_deductions)}</b>
+            </div>`:'');})()}
           <div class="payslip-total-row" style="color:var(--red)">
             <span>Jumlah Potongan</span>
             <span>-${formatRM(slip.total_deductions)}</span>
@@ -1766,7 +1830,7 @@ function openProcessPayrollDialog(){
   open(`Proses Penggajian — ${formatMyMonthYear(ym)}`,`
     <p class="dialog-copy">Sistem akan menjana slip gaji bagi semua staf tetap aktif (Guru & Admin) untuk bulan <strong>${formatMyMonthYear(ym)}</strong>:</p>
     <ul style="font-size:12px;color:var(--ink);line-height:1.6;margin:0 0 14px;padding-left:18px">
-      <li>Mengira Gaji Asas, Elaun Tetap serta potongan KWSP, PERKESO, SIP (EIS) & PCB.</li>
+      <li>Mengira Gaji Asas, Elaun Tetap serta potongan KWSP, PERKESO, SIP (EIS), PCB &amp; potongan lain-lain.</li>
       <li>Memasukkan <strong>${pendingClaims.length} tuntutan perubatan</strong> yang telah diluluskan ke dalam slip gaji 27hb.</li>
       <li>Jika bulan ini pernah diproses, slip akan dikemas kini tanpa menghilangkan tuntutan perubatan bulan tersebut.</li>
     </ul>
@@ -1894,6 +1958,25 @@ document.addEventListener('click',async e=>{
   }
   if(b.dataset.editPayrollProf){
     openEditPayrollProfileDialog(b.dataset.editPayrollProf);
+  }
+  if(b.id==='btn-add-other-deduction'){
+    const list=document.querySelector('#other-deductions-list');
+    if(list){
+      if(list.querySelectorAll('.other-deduction-row').length>=20){
+        notify('Maksimum 20 potongan lain-lain dibenarkan.');
+        return;
+      }
+      document.querySelector('#other-ded-empty')?.remove();
+      list.insertAdjacentHTML('beforeend',renderOtherDeductionRow());
+      list.querySelector('.other-deduction-row:last-child .other-ded-desc')?.focus();
+    }
+  }
+  if(b.classList.contains('btn-remove-other-ded')){
+    const list=document.querySelector('#other-deductions-list');
+    b.closest('.other-deduction-row')?.remove();
+    if(list&&!list.querySelector('.other-deduction-row')){
+      list.innerHTML='<p id="other-ded-empty" style="margin:0;font-size:11px;color:var(--muted)">Tiada potongan lain-lain ditetapkan.</p>';
+    }
   }
   if(b.dataset.viewPayslip){
     openPayslipModal(b.dataset.viewPayslip);
@@ -2080,6 +2163,19 @@ document.addEventListener('submit',async e=>{
 
     try{
       const f=new FormData(e.target);
+      const otherDeductions=[];
+      for(const row of e.target.querySelectorAll('.other-deduction-row')){
+        const desc=(row.querySelector('.other-ded-desc')?.value||'').trim();
+        const amtRaw=(row.querySelector('.other-ded-amt')?.value||'').trim();
+        if(!desc&&!amtRaw)continue;
+        const amt=Number(amtRaw);
+        if(!desc)throw new Error('Sila masukkan penerangan bagi setiap potongan lain-lain.');
+        if(desc.length>150)throw new Error('Penerangan potongan lain-lain maksimum 150 aksara.');
+        if(!Number.isFinite(amt)||amt<=0)throw new Error('Jumlah potongan lain-lain mestilah melebihi RM 0.00.');
+        otherDeductions.push({description:desc,amount:Number(amt.toFixed(2))});
+      }
+      if(otherDeductions.length>20)throw new Error('Maksimum 20 potongan lain-lain dibenarkan.');
+
       await api('admin_payroll_profile_save',{
         user_id:f.get('user_id'),
         ic_no:f.get('ic_no'),
@@ -2094,7 +2190,8 @@ document.addEventListener('submit',async e=>{
         epf_employer_rate:f.get('epf_employer_rate'),
         socso_category:f.get('socso_category'),
         eis_active:f.get('eis_active')?1:0,
-        monthly_pcb:f.get('monthly_pcb')
+        monthly_pcb:f.get('monthly_pcb'),
+        other_deductions:otherDeductions
       });
 
       dialog.close();

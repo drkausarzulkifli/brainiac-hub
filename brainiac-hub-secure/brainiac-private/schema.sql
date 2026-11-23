@@ -151,6 +151,7 @@ CREATE TABLE IF NOT EXISTS hub_staff_payroll_profiles (
  socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
  eis_active INT NOT NULL DEFAULT 1,
  monthly_pcb DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+ other_deductions_json LONGTEXT DEFAULT NULL,
  created_at VARCHAR(30) NOT NULL,
  updated_at VARCHAR(30) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -172,6 +173,7 @@ CREATE TABLE IF NOT EXISTS hub_payroll_runs (
  total_eis_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
  total_eis_employer DECIMAL(12,2) NOT NULL DEFAULT 0.00,
  total_pcb DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+ total_other_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00,
  total_net DECIMAL(12,2) NOT NULL DEFAULT 0.00,
  status VARCHAR(20) NOT NULL DEFAULT 'Draft',
  processed_by VARCHAR(36) NOT NULL,
@@ -199,6 +201,7 @@ CREATE TABLE IF NOT EXISTS hub_payslips (
  eis_employee DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  eis_employer DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  pcb_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+ other_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  total_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  net_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  details_json LONGTEXT NOT NULL,

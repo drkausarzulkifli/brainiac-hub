@@ -44,6 +44,18 @@
 .nav-group-title{font-size:10px;font-weight:700;letter-spacing:.8px;color:var(--muted);padding:14px 12px 4px;text-transform:uppercase}
 .nav-group-title:first-child{padding-top:4px}
 
+/* Non-statutory Salary Deductions Box */
+.other-deductions-box{margin:14px 0 8px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;background:var(--bg)}
+.other-deductions-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.other-deductions-list{margin-top:10px;display:flex;flex-direction:column;gap:10px}
+.other-deduction-row{display:grid;grid-template-columns:1fr 130px auto;gap:8px;align-items:end;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
+.other-deduction-row .field{margin:0}
+.btn-remove-other-ded{color:var(--red)!important;border-color:#f5c2c2!important;min-height:42px;padding:0 12px}
+@media(max-width:600px){
+  .other-deduction-row{grid-template-columns:1fr auto}
+  .other-deduction-row .other-ded-desc-wrap{grid-column:1 / -1}
+}
+
 @media print{
   body *{visibility:hidden}
   #dialog,#dialog #payslip-print-area,#dialog #payslip-print-area *{visibility:visible}
