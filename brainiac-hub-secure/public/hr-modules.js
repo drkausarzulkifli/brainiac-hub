@@ -1124,13 +1124,16 @@ async function payrollWorkspace(){
 
 function renderMyPayslipsSection(){
   const rows=myPayslipsData.map((s,i)=>{
+    const fixAllow=Number(s.fixed_allowance||0);
+    const travAllow=Number(s.travelling_allowance||0);
+    const totAllow=fixAllow+travAllow;
     return `
       <tr>
         <td>${i+1}</td>
         <td><b>${formatMyMonthYear(s.year_month)}</b></td>
         <td>${formatMyDate(s.pay_date)}</td>
         <td>${formatRM(s.basic_salary)}</td>
-        <td>${formatRM(s.fixed_allowance)}</td>
+        <td>${formatRM(totAllow)}${travAllow>0?`<small style="display:block;color:var(--muted)">Perjalanan: ${formatRM(travAllow)}</small>`:''}</td>
         <td style="color:var(--teal)"><b>${formatRM(s.medical_claims)}</b></td>
         <td style="color:var(--red)">-${formatRM(s.total_deductions)}</td>
         <td><b style="font-size:14px;color:var(--teal)">${formatRM(s.net_salary)}</b></td>
@@ -1159,7 +1162,7 @@ function renderMyPayslipsSection(){
               <th>Bulan Gaji</th>
               <th>Tarikh Bayaran</th>
               <th>Gaji Asas</th>
-              <th>Elaun Tetap</th>
+              <th>Elaun</th>
               <th>Tuntutan Perubatan</th>
               <th>Jumlah Potongan</th>
               <th>Gaji Bersih (Net)</th>
@@ -1187,12 +1190,15 @@ function renderAdminPayrollRunsSection(){
   const totSocsoEis=curRun?(Number(curRun.total_socso_employee)+Number(curRun.total_socso_employer)+Number(curRun.total_eis_employee)+Number(curRun.total_eis_employer)):0;
   const totNet=curRun?Number(curRun.total_net):0;
 
-  const staffSlipRows=monthSlips.map((s,i)=>`
+  const staffSlipRows=monthSlips.map((s,i)=>{
+    const fixAllow=Number(s.fixed_allowance||0);
+    const travAllow=Number(s.travelling_allowance||0);
+    return `
     <tr>
       <td>${i+1}</td>
       <td><b>${esc(s.user_name)}</b><small style="display:block;color:var(--muted)">${esc(demoRoles[s.user_role]||s.user_role)}</small></td>
       <td>${formatRM(s.basic_salary)}</td>
-      <td>${formatRM(s.fixed_allowance)}</td>
+      <td>${formatRM(fixAllow+travAllow)}${travAllow>0?`<small style="display:block;color:var(--muted)">Perjalanan: ${formatRM(travAllow)}</small>`:''}</td>
       <td style="color:var(--teal)"><b>${formatRM(s.medical_claims)}</b></td>
       <td>${formatRM(s.epf_employee)} / ${formatRM(s.epf_employer)}</td>
       <td style="color:var(--red)">-${formatRM(s.total_deductions)}</td>
@@ -1203,7 +1209,7 @@ function renderAdminPayrollRunsSection(){
         </button>
       </td>
     </tr>
-  `).join('');
+  `;}).join('');
 
   const runRows=runs.map((r,i)=>{
     return `
@@ -1284,7 +1290,7 @@ function renderAdminPayrollRunsSection(){
               <th>#</th>
               <th>Nama Staf</th>
               <th>Gaji Asas</th>
-              <th>Elaun Tetap</th>
+              <th>Elaun</th>
               <th>Tuntutan Perubatan</th>
               <th>KWSP (Pekerja / Majikan)</th>
               <th>Jumlah Potongan</th>
@@ -1383,6 +1389,7 @@ function renderAdminPayrollProfilesSection(){
     const prof=profiles.find(p=>p.user_id===u.id)||{};
     const basic=Number(prof.basic_salary||0);
     const allow=Number(prof.fixed_allowance||0);
+    const trav=Number(prof.travelling_allowance||0);
     const otherList=parseOtherDeductions(prof.other_deductions_json).filter(d=>Number(d.amount)>0);
     const otherTot=otherList.reduce((acc,d)=>acc+Number(d.amount||0),0);
     return `
@@ -1393,9 +1400,9 @@ function renderAdminPayrollProfilesSection(){
         <td>${esc(prof.epf_no||'-')}</td>
         <td>${esc(prof.bank_name||'-')} ${prof.bank_acc_no?`<small style="display:block;color:var(--muted)">${esc(prof.bank_acc_no)}</small>`:''}</td>
         <td><b>${formatRM(basic)}</b></td>
-        <td>${formatRM(allow)}</td>
+        <td>${formatRM(allow+trav)}${trav>0?`<small style="display:block;color:var(--muted)">Perjalanan: ${formatRM(trav)}</small>`:''}</td>
         <td>
-          <b>${formatRM(basic+allow)}</b>
+          <b>${formatRM(basic+allow+trav)}</b>
           ${otherTot>0?`<small style="display:block;color:var(--red)">Potongan lain: -${formatRM(otherTot)} (${otherList.length})</small>`:''}
         </td>
         <td>
@@ -1410,7 +1417,7 @@ function renderAdminPayrollProfilesSection(){
       <div class="panel-head">
         <div>
           <h2>Profil Gaji & Butiran Caruman Staf</h2>
-          <p>Konfigurasi gaji asas, elaun tetap, potongan bukan statutori, nombor akaun bank, dan nombor statutori (KWSP, PERKESO, LHDN) bagi setiap cikgu dan admin.</p>
+          <p>Konfigurasi gaji asas, elaun berkanun &amp; elaun perjalanan (dikecualikan KWSP/PERKESO/SIP), potongan bukan statutori, akaun bank, dan nombor statutori setiap staf.</p>
         </div>
       </div>
       <div class="att-table-wrap">
@@ -1423,7 +1430,7 @@ function renderAdminPayrollProfilesSection(){
               <th>No. KWSP</th>
               <th>Bank & No. Akaun</th>
               <th>Gaji Asas</th>
-              <th>Elaun Tetap</th>
+              <th>Elaun</th>
               <th>Gaji Kasar Anggaran</th>
               <th>Tindakan</th>
             </tr>
@@ -1487,10 +1494,19 @@ function openEditPayrollProfileDialog(userId){
 
       <div class="form-grid">
         <label class="field">Gaji Asas Bulanan (RM) <span style="color:var(--red)">*</span>
-          <input type="number" name="basic_salary" step="10" min="0" required placeholder="0.00" value="${existing.basic_salary||''}">
+          <input type="number" name="basic_salary" step="0.01" min="0" required placeholder="0.00" value="${existing.basic_salary||''}">
         </label>
-        <label class="field">Elaun Tetap Bulanan (RM)
-          <input type="number" name="fixed_allowance" step="10" min="0" placeholder="0.00" value="${existing.fixed_allowance||'0.00'}">
+        <label class="field">Elaun Tetap Berkanun (RM) <small style="font-size:10.5px;color:var(--muted);font-weight:400">(Kena KWSP, PERKESO &amp; SIP)</small>
+          <input type="number" name="fixed_allowance" step="0.01" min="0" placeholder="0.00" value="${existing.fixed_allowance||'0.00'}">
+        </label>
+      </div>
+
+      <div class="form-grid">
+        <label class="field">Elaun Perjalanan / Travelling (RM) <small style="font-size:10.5px;color:var(--muted);font-weight:400">(Dikecualikan KWSP, PERKESO &amp; SIP)</small>
+          <input type="number" name="travelling_allowance" step="0.01" min="0" placeholder="0.00" value="${existing.travelling_allowance||'0.00'}">
+        </label>
+        <label class="field">Potongan Cukai Bulanan (PCB)
+          <input type="number" name="monthly_pcb" step="0.01" min="0" placeholder="0.00" value="${existing.monthly_pcb||'0.00'}">
         </label>
       </div>
 
@@ -1503,17 +1519,12 @@ function openEditPayrollProfileDialog(userId){
         </label>
       </div>
 
-      <div class="form-grid">
-        <label class="field">Kategori PERKESO (SOCSO)
-          <select name="socso_category">
-            <option value="cat1" ${existing.socso_category==='cat1'?'selected':''}>Kategori 1 (Bencana Pekerjaan & Keilatan)</option>
-            <option value="cat2" ${existing.socso_category==='cat2'?'selected':''}>Kategori 2 (Bencana Pekerjaan Sahaja - Staf 60+)</option>
-          </select>
-        </label>
-        <label class="field">Potongan Cukai Bulanan (PCB)
-          <input type="number" name="monthly_pcb" step="1" min="0" placeholder="0.00" value="${existing.monthly_pcb||'0.00'}">
-        </label>
-      </div>
+      <label class="field">Kategori PERKESO (SOCSO)
+        <select name="socso_category">
+          <option value="cat1" ${existing.socso_category==='cat1'?'selected':''}>Kategori 1 (Bencana Pekerjaan & Keilatan)</option>
+          <option value="cat2" ${existing.socso_category==='cat2'?'selected':''}>Kategori 2 (Bencana Pekerjaan Sahaja - Staf 60+)</option>
+        </select>
+      </label>
 
       <label class="field" style="display:flex;align-items:center;gap:8px;margin-top:6px">
         <input type="checkbox" name="eis_active" value="1" ${(Number(existing.eis_active??1)!==0)?'checked':''}>
@@ -1565,7 +1576,7 @@ async function downloadPayslipPdf(slip){
     const prof=details.profile||{};
     const eeRate=(prof.epf_employee_rate!==undefined&&prof.epf_employee_rate!==null)?Number(prof.epf_employee_rate):11;
     const rawErRate=(prof.epf_employer_rate!==undefined&&prof.epf_employer_rate!==null)?Number(prof.epf_employer_rate):13;
-    const erRate=(Number(slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
+    const erRate=(Number(details.calculation?.gross??slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
 
     const pageW=210,margin=16;
     let y=16;
@@ -1621,7 +1632,8 @@ async function downloadPayslipPdf(slip){
     }
 
     rowLine(leftX,yLeft,'Gaji Asas (Basic Salary)',formatRM(slip.basic_salary));yLeft+=6;
-    if(Number(slip.fixed_allowance)>0){rowLine(leftX,yLeft,'Elaun Tetap',formatRM(slip.fixed_allowance));yLeft+=6;}
+    if(Number(slip.fixed_allowance)>0){rowLine(leftX,yLeft,'Elaun Tetap Berkanun',formatRM(slip.fixed_allowance));yLeft+=6;}
+    if(Number(slip.travelling_allowance)>0){rowLine(leftX,yLeft,'Elaun Perjalanan (Travelling)',formatRM(slip.travelling_allowance));yLeft+=6;}
     if(Number(slip.medical_claims)>0){rowLine(leftX,yLeft,'Bayaran Balik Tuntutan Perubatan',formatRM(slip.medical_claims));yLeft+=6;}
 
     rowLine(rightX,yRight,`Caruman KWSP Pekerja (${eeRate}%)`,formatRM(slip.epf_employee));yRight+=6;
@@ -1696,7 +1708,7 @@ function openPayslipModal(slipId){
   const prof=details.profile||{};
   const eeRate=(prof.epf_employee_rate!==undefined&&prof.epf_employee_rate!==null)?Number(prof.epf_employee_rate):11;
   const rawErRate=(prof.epf_employer_rate!==undefined&&prof.epf_employer_rate!==null)?Number(prof.epf_employer_rate):13;
-  const erRate=(Number(slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
+  const erRate=(Number(details.calculation?.gross??slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
 
   const contentHtml=`
     <div class="payslip-card" id="payslip-print-area">
@@ -1737,8 +1749,14 @@ function openPayslipModal(slipId){
           </div>
           ${Number(slip.fixed_allowance)>0?`
             <div class="payslip-row">
-              <span>Elaun Tetap</span>
+              <span>Elaun Tetap Berkanun</span>
               <b>${formatRM(slip.fixed_allowance)}</b>
+            </div>
+          `:''}
+          ${Number(slip.travelling_allowance)>0?`
+            <div class="payslip-row">
+              <span>Elaun Perjalanan (Travelling)<small style="display:block;font-size:10px;color:var(--muted)">Dikecualikan KWSP, PERKESO &amp; SIP</small></span>
+              <b>${formatRM(slip.travelling_allowance)}</b>
             </div>
           `:''}
           ${Number(slip.medical_claims)>0?`
@@ -2194,6 +2212,7 @@ document.addEventListener('submit',async e=>{
         bank_acc_no:f.get('bank_acc_no'),
         basic_salary:f.get('basic_salary'),
         fixed_allowance:f.get('fixed_allowance'),
+        travelling_allowance:f.get('travelling_allowance'),
         epf_employee_rate:f.get('epf_employee_rate'),
         epf_employer_rate:f.get('epf_employer_rate'),
         socso_category:f.get('socso_category'),

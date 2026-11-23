@@ -537,6 +537,7 @@ if($method==='POST' && $action==='admin_payroll_profile_save') {
     $bankAcc=trim((string)($b['bank_acc_no']??''));
     $basic=max(0,(float)($b['basic_salary']??0.00));
     $allowance=max(0,(float)($b['fixed_allowance']??0.00));
+    $travelling=max(0,round((float)($b['travelling_allowance']??0.00),2));
     $epfEeRate=(float)($b['epf_employee_rate']??11.00);
     $epfErRate=(float)($b['epf_employer_rate']??13.00);
     $socsoCat=trim((string)($b['socso_category']??'cat1'));
@@ -571,12 +572,12 @@ if($method==='POST' && $action==='admin_payroll_profile_save') {
 
     $existing=query('SELECT id FROM hub_staff_payroll_profiles WHERE user_id=?',[$userId])->fetch();
     if($existing){
-        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,skbbk_active=?,monthly_pcb=?,other_deductions_json=?,updated_at=? WHERE id=?',
-            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),$existing['id']]);
+        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,travelling_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,skbbk_active=?,monthly_pcb=?,other_deductions_json=?,updated_at=? WHERE id=?',
+            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$travelling,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),$existing['id']]);
     }else{
         $id=uid();
-        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,skbbk_active,monthly_pcb,other_deductions_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),stamp()]);
+        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,travelling_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,skbbk_active,monthly_pcb,other_deductions_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$travelling,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),stamp()]);
     }
     audit('admin_payroll_profile_save',['user_id'=>$userId,'basic'=>$basic,'other_deductions_count'=>count($otherDeductions)],$u['id']);
     reply(['ok'=>true,'message'=>'Profil gaji staf berjaya disimpan.']);
@@ -603,7 +604,7 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
     query('DELETE FROM hub_payroll_runs WHERE `year_month`=?',[$yearMonth]);
 
     $runId=uid();
-    $totBasic=0.0;$totAllow=0.0;$totClaims=0.0;$totGross=0.0;
+    $totBasic=0.0;$totAllow=0.0;$totTravelling=0.0;$totClaims=0.0;$totGross=0.0;
     $totEpfEe=0.0;$totEpfEr=0.0;$totSocsoEe=0.0;$totSocsoEr=0.0;
     $totEisEe=0.0;$totEisEr=0.0;$totPcb=0.0;$totOtherDed=0.0;$totNet=0.0;
 
@@ -611,6 +612,7 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         $prof=query('SELECT * FROM hub_staff_payroll_profiles WHERE user_id=?',[$usr['id']])->fetch();
         $basic=$prof?(float)$prof['basic_salary']:0.00;
         $allowance=$prof?(float)$prof['fixed_allowance']:0.00;
+        $travelling=$prof?(float)($prof['travelling_allowance']??0.00):0.00;
         $epfEeRate=$prof?(float)$prof['epf_employee_rate']:11.00;
         $epfErRate=$prof?(float)$prof['epf_employer_rate']:13.00;
         $socsoCat=$prof?$prof['socso_category']:'cat1';
@@ -637,7 +639,9 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         foreach($approvedClaims as $cl){$claimSum+=(float)$cl['amount'];}
 
         $calc=calculateStatutoryContributions($basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive);
-        $gross=$calc['gross'];
+        $calc['travelling_allowance']=round($travelling,2);
+        $calc['statutory_wages']=$calc['gross'];
+        $gross=round($calc['gross']+$travelling,2);
         $totDeductions=round($calc['epf_employee']+$calc['socso_employee']+$calc['eis_employee']+$pcb+$otherDedSum,2);
         $net=round(($gross+$claimSum)-$totDeductions,2);
 
@@ -651,23 +655,23 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         ];
 
         $slipId=uid();
-        query('INSERT INTO hub_payslips(id,run_id,user_id,user_name,user_role,`year_month`,pay_date,basic_salary,fixed_allowance,medical_claims,other_earnings,gross_salary,epf_employee,epf_employer,socso_employee,socso_employer,eis_employee,eis_employer,pcb_amount,other_deductions,total_deductions,net_salary,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [$slipId,$runId,$usr['id'],$usr['name'],$usr['role'],$yearMonth,$payDate,$basic,$allowance,$claimSum,0.00,$gross,$calc['epf_employee'],$calc['epf_employer'],$calc['socso_employee'],$calc['socso_employer'],$calc['eis_employee'],$calc['eis_employer'],$pcb,$otherDedSum,$totDeductions,$net,json_encode($slipDetails,JSON_UNESCAPED_UNICODE),$cutEnd.'T00:00:00+08:00']);
+        query('INSERT INTO hub_payslips(id,run_id,user_id,user_name,user_role,`year_month`,pay_date,basic_salary,fixed_allowance,travelling_allowance,medical_claims,other_earnings,gross_salary,epf_employee,epf_employer,socso_employee,socso_employer,eis_employee,eis_employer,pcb_amount,other_deductions,total_deductions,net_salary,details_json,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$slipId,$runId,$usr['id'],$usr['name'],$usr['role'],$yearMonth,$payDate,$basic,$allowance,$travelling,$claimSum,0.00,$gross,$calc['epf_employee'],$calc['epf_employer'],$calc['socso_employee'],$calc['socso_employer'],$calc['eis_employee'],$calc['eis_employer'],$pcb,$otherDedSum,$totDeductions,$net,json_encode($slipDetails,JSON_UNESCAPED_UNICODE),$cutEnd.'T00:00:00+08:00']);
 
         // Mark claims as paid via payroll
         foreach($approvedClaims as $cl){
             query('UPDATE hub_medical_claims SET paid_via_payroll=1,payroll_month=?,updated_at=? WHERE id=?',[$yearMonth,stamp(),$cl['id']]);
         }
 
-        $totBasic+=$basic;$totAllow+=$allowance;$totClaims+=$claimSum;$totGross+=$gross;
+        $totBasic+=$basic;$totAllow+=$allowance;$totTravelling+=$travelling;$totClaims+=$claimSum;$totGross+=$gross;
         $totEpfEe+=$calc['epf_employee'];$totEpfEr+=$calc['epf_employer'];
         $totSocsoEe+=$calc['socso_employee'];$totSocsoEr+=$calc['socso_employer'];
         $totEisEe+=$calc['eis_employee'];$totEisEr+=$calc['eis_employer'];
         $totPcb+=$pcb;$totOtherDed+=$otherDedSum;$totNet+=$net;
     }
 
-    query('INSERT INTO hub_payroll_runs(id,`year_month`,cutoff_start,cutoff_end,pay_date,total_basic,total_allowance,total_claims,total_gross,total_epf_employee,total_epf_employer,total_socso_employee,total_socso_employer,total_eis_employee,total_eis_employer,total_pcb,total_other_deductions,total_net,status,processed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-        [$runId,$yearMonth,$cutStart,$cutEnd,$payDate,$totBasic,$totAllow,$totClaims,$totGross,$totEpfEe,$totEpfEr,$totSocsoEe,$totSocsoEr,$totEisEe,$totEisEr,$totPcb,$totOtherDed,$totNet,'Approved',$u['id'],stamp(),stamp()]);
+    query('INSERT INTO hub_payroll_runs(id,`year_month`,cutoff_start,cutoff_end,pay_date,total_basic,total_allowance,total_travelling_allowance,total_claims,total_gross,total_epf_employee,total_epf_employer,total_socso_employee,total_socso_employer,total_eis_employee,total_eis_employer,total_pcb,total_other_deductions,total_net,status,processed_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+        [$runId,$yearMonth,$cutStart,$cutEnd,$payDate,$totBasic,$totAllow,$totTravelling,$totClaims,$totGross,$totEpfEe,$totEpfEr,$totSocsoEe,$totSocsoEr,$totEisEe,$totEisEr,$totPcb,$totOtherDed,$totNet,'Approved',$u['id'],stamp(),stamp()]);
 
     audit('admin_payroll_run_process',['year_month'=>$yearMonth,'total_net'=>$totNet,'total_other_deductions'=>$totOtherDed],$u['id']);
     $pdo->commit();
@@ -690,7 +694,8 @@ if($method==='GET' && $action==='admin_payroll_export_kwsp') {
         $ic=preg_replace('/[^0-9]/','',$s['ic_no']??'');
         $epfMember=preg_replace('/[^0-9]/','',$s['epf_no']??'');
         $name=strtoupper(substr($s['user_name'],0,40));
-        $wage=(float)$s['gross_salary'];
+        $slipDetails=json_decode((string)($s['details_json']??'{}'),true);
+        $wage=isset($slipDetails['calculation']['gross'])?(float)$slipDetails['calculation']['gross']:max(0.0,(float)$s['gross_salary']-(float)($s['travelling_allowance']??0.0));
         $ee=(float)$s['epf_employee'];
         $er=(float)$s['epf_employer'];
         $totWages+=$wage;$totEe+=$ee;$totEr+=$er;

@@ -198,6 +198,7 @@ function ensureHrTables(): void {
         bank_acc_no VARCHAR(40) NOT NULL DEFAULT '',
         basic_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         fixed_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        travelling_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         epf_employee_rate DECIMAL(4,2) NOT NULL DEFAULT 11.00,
         epf_employer_rate DECIMAL(4,2) NOT NULL DEFAULT 13.00,
         socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
@@ -217,6 +218,7 @@ function ensureHrTables(): void {
         pay_date VARCHAR(10) NOT NULL,
         total_basic DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        total_travelling_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_claims DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_gross DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         total_epf_employee DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -244,6 +246,7 @@ function ensureHrTables(): void {
         pay_date VARCHAR(10) NOT NULL,
         basic_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         fixed_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        travelling_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         medical_claims DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         other_earnings DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         gross_salary DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -273,14 +276,23 @@ function ensureHrTables(): void {
             return false;
         }catch(Throwable){return false;}
     };
+    if(!$hasCol('hub_staff_payroll_profiles','travelling_allowance')){
+        $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN travelling_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+    }
     if(!$hasCol('hub_staff_payroll_profiles','skbbk_active')){
         $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN skbbk_active INT NOT NULL DEFAULT 1');
     }
     if(!$hasCol('hub_staff_payroll_profiles','other_deductions_json')){
         $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN other_deductions_json LONGTEXT DEFAULT NULL');
     }
+    if(!$hasCol('hub_payroll_runs','total_travelling_allowance')){
+        $run('ALTER TABLE hub_payroll_runs ADD COLUMN total_travelling_allowance DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    }
     if(!$hasCol('hub_payroll_runs','total_other_deductions')){
         $run('ALTER TABLE hub_payroll_runs ADD COLUMN total_other_deductions DECIMAL(12,2) NOT NULL DEFAULT 0.00');
+    }
+    if(!$hasCol('hub_payslips','travelling_allowance')){
+        $run('ALTER TABLE hub_payslips ADD COLUMN travelling_allowance DECIMAL(10,2) NOT NULL DEFAULT 0.00');
     }
     if(!$hasCol('hub_payslips','other_deductions')){
         $run('ALTER TABLE hub_payslips ADD COLUMN other_deductions DECIMAL(10,2) NOT NULL DEFAULT 0.00');
