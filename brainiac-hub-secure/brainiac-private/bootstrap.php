@@ -202,6 +202,7 @@ function ensureHrTables(): void {
         epf_employer_rate DECIMAL(4,2) NOT NULL DEFAULT 13.00,
         socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
         eis_active INT NOT NULL DEFAULT 1,
+        skbbk_active INT NOT NULL DEFAULT 1,
         monthly_pcb DECIMAL(10,2) NOT NULL DEFAULT 0.00,
         other_deductions_json LONGTEXT DEFAULT NULL,
         created_at VARCHAR(30) NOT NULL,
@@ -272,6 +273,9 @@ function ensureHrTables(): void {
             return false;
         }catch(Throwable){return false;}
     };
+    if(!$hasCol('hub_staff_payroll_profiles','skbbk_active')){
+        $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN skbbk_active INT NOT NULL DEFAULT 1');
+    }
     if(!$hasCol('hub_staff_payroll_profiles','other_deductions_json')){
         $run('ALTER TABLE hub_staff_payroll_profiles ADD COLUMN other_deductions_json LONGTEXT DEFAULT NULL');
     }
@@ -289,18 +293,90 @@ function haversineDistanceMeters(float $lat1, float $lon1, float $lat2, float $l
     $c=2*atan2(sqrt($a),sqrt(1-$a));
     return (int)round($earthRadius*$c);
 }
-function calculateStatutoryContributions(float $basic, float $allowance, float $epfEeRate=11.0, float $epfErRate=13.0, string $socsoCat='cat1', bool $eisActive=true): array {
-    $gross=$basic+$allowance;
-    $actualEpfErRate=($gross>5000&&$epfErRate==13.0)?12.0:$epfErRate;
-    $epfEe=round($gross*($epfEeRate/100),2);
-    $epfEr=round($gross*($actualEpfErRate/100),2);
-    $socsoBase=min($gross,6000.0);
-    $socsoEe=($socsoCat==='cat1')?round($socsoBase*0.005,2):0.0;
-    $socsoEr=($socsoCat==='cat1')?round($socsoBase*0.0175,2):round($socsoBase*0.0125,2);
-    $eisBase=min($gross,6000.0);
-    $eisEe=$eisActive?round($eisBase*0.002,2):0.0;
-    $eisEr=$eisActive?round($eisBase*0.002,2):0.0;
-    return ['gross'=>$gross,'epf_employee'=>$epfEe,'epf_employer'=>$epfEr,'socso_employee'=>$socsoEe,'socso_employer'=>$socsoEr,'eis_employee'=>$eisEe,'eis_employer'=>$eisEr];
+function perkesoContributionSchedule(): array {
+    // Official PERKESO Act 4 (incl. SKBBK / LINDUNG 24 Jam, effective Jun 2026) & Act 800 (EIS) 65-band table
+    // [max_cents, cat1_employer, cat1_employee_invalidity, skbbk_employee, cat2_employer, eis_each]
+    static $table=null;
+    if($table!==null)return $table;
+    $table=[
+        [3000,0.40,0.10,0.20,0.30,0.05],
+        [5000,0.70,0.20,0.30,0.50,0.10],
+        [7000,1.10,0.30,0.50,0.80,0.15],
+        [10000,1.50,0.40,0.65,1.10,0.20],
+        [14000,2.10,0.60,0.90,1.50,0.25],
+        [20000,2.95,0.85,1.25,2.10,0.35],
+        [30000,4.35,1.25,1.85,3.10,0.50],
+    ];
+    for($band=4;$band<=60;$band++){
+        $idx=$band-4; // 0 for <=400 ... 56 for <=6000
+        $pairs=intdiv($idx,2);
+        $odd=$idx%2;
+        $cat1ErCents=615+$pairs*350+$odd*170;
+        $cat1EeCents=175+$idx*50;
+        $skbbkCents=265+$pairs*150+$odd*70;
+        $cat2ErCents=440+$pairs*250+$odd*120;
+        $eisCents=70+$idx*20;
+        $table[]=[$band*10000,$cat1ErCents/100,$cat1EeCents/100,$skbbkCents/100,$cat2ErCents/100,$eisCents/100];
+    }
+    return $table;
+}
+function calculateStatutoryContributions(float $basic, float $allowance, float $epfEeRate=11.0, float $epfErRate=13.0, string $socsoCat='cat1', bool $eisActive=true, bool $skbbkActive=true): array {
+    $gross=round(max(0.0,$basic+$allowance),2);
+    $grossCents=(int)round($gross*100);
+    if($grossCents<=0){
+        return ['gross'=>0.0,'epf_employee'=>0.0,'epf_employer'=>0.0,'socso_employee'=>0.0,'socso_employer'=>0.0,'socso_invalidity_employee'=>0.0,'socso_skbbk_employee'=>0.0,'eis_employee'=>0.0,'eis_employer'=>0.0];
+    }
+
+    // 1. KWSP / EPF Third Schedule (Jadual Ketiga)
+    // Wages <= RM10.00 have nil contribution; >RM10..RM5,000 use RM20 ceiling bands; >RM5,000..RM20,000 use RM100 ceiling bands; >RM20,000 use exact wages.
+    // All resulting contributions are rounded UP to the next whole Ringgit. Direct 2% foreign-worker rate uses exact wages.
+    $actualEpfErRate=($grossCents>500000&&$epfErRate==13.0)?12.0:$epfErRate;
+    $epfBandUpper=0.0;
+    if($grossCents>1000){
+        if($grossCents<=500000){
+            $epfBandUpper=(float)max(20,intdiv($grossCents+1999,2000)*20);
+        }elseif($grossCents<=2000000){
+            $epfBandUpper=(float)(intdiv($grossCents+9999,10000)*100);
+        }else{
+            $epfBandUpper=$gross;
+        }
+    }
+    $calcEpf=function(float $rate) use ($gross, $grossCents, $epfBandUpper): float {
+        if($rate<=0.0)return 0.0;
+        if(abs($rate-2.0)<0.001)return (float)ceil(round($gross*($rate/100),6));
+        if($grossCents<=1000)return 0.0;
+        return (float)ceil(round($epfBandUpper*($rate/100),6));
+    };
+    $epfEe=$calcEpf($epfEeRate);
+    $epfEr=$calcEpf($actualEpfErRate);
+
+    // 2. PERKESO Act 4 (with SKBBK / LINDUNG 24 Jam) & Act 800 (EIS) official 65-band table lookup
+    $schedule=perkesoContributionSchedule();
+    $matched=$schedule[count($schedule)-1];
+    foreach($schedule as $row){
+        if($grossCents<=$row[0]){$matched=$row;break;}
+    }
+    [,$cat1Er,$cat1EeInvalidity,$skbbkEe,$cat2Er,$eisEach]=$matched;
+
+    $socsoEeInvalidity=($socsoCat==='cat1')?$cat1EeInvalidity:0.0;
+    $socsoEeSkbbk=$skbbkActive?$skbbkEe:0.0;
+    $socsoEe=round($socsoEeInvalidity+$socsoEeSkbbk,2);
+    $socsoEr=($socsoCat==='cat1')?$cat1Er:$cat2Er;
+
+    $eisEe=$eisActive?$eisEach:0.0;
+    $eisEr=$eisActive?$eisEach:0.0;
+
+    return [
+        'gross'=>$gross,
+        'epf_employee'=>$epfEe,
+        'epf_employer'=>$epfEr,
+        'socso_employee'=>$socsoEe,
+        'socso_employer'=>$socsoEr,
+        'socso_invalidity_employee'=>$socsoEeInvalidity,
+        'socso_skbbk_employee'=>$socsoEeSkbbk,
+        'eis_employee'=>$eisEe,
+        'eis_employer'=>$eisEr
+    ];
 }
 function malaysiaNow(): array {
     try{$tz=new DateTimeZone('Asia/Kuala_Lumpur');$dt=new DateTimeImmutable('now',$tz);}catch(Throwable){$dt=new DateTimeImmutable('now +8 hours');}

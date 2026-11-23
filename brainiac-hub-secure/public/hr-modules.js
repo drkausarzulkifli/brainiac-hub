@@ -1516,8 +1516,13 @@ function openEditPayrollProfileDialog(userId){
       </div>
 
       <label class="field" style="display:flex;align-items:center;gap:8px;margin-top:6px">
-        <input type="checkbox" name="eis_active" value="1" ${(existing.eis_active!==0)?'checked':''}>
+        <input type="checkbox" name="eis_active" value="1" ${(Number(existing.eis_active??1)!==0)?'checked':''}>
         <span>Caruman Sistem Insurans Pekerjaan (SIP / EIS) Aktif (0.2% Pekerja / 0.2% Majikan)</span>
+      </label>
+
+      <label class="field" style="display:flex;align-items:center;gap:8px;margin-top:6px">
+        <input type="checkbox" name="skbbk_active" value="1" ${(Number(existing.skbbk_active??1)!==0)?'checked':''}>
+        <span>Caruman LINDUNG 24 Jam / SKBBK PERKESO Aktif (0.75% Pekerja mengikut jadual)</span>
       </label>
 
       <div class="other-deductions-box">
@@ -1558,8 +1563,9 @@ async function downloadPayslipPdf(slip){
 
     let details={};try{details=JSON.parse(slip.details_json||'{}')}catch{}
     const prof=details.profile||{};
-    const eeRate=prof.epf_employee_rate||11;
-    const erRate=prof.epf_employer_rate||13;
+    const eeRate=(prof.epf_employee_rate!==undefined&&prof.epf_employee_rate!==null)?Number(prof.epf_employee_rate):11;
+    const rawErRate=(prof.epf_employer_rate!==undefined&&prof.epf_employer_rate!==null)?Number(prof.epf_employer_rate):13;
+    const erRate=(Number(slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
 
     const pageW=210,margin=16;
     let y=16;
@@ -1619,7 +1625,8 @@ async function downloadPayslipPdf(slip){
     if(Number(slip.medical_claims)>0){rowLine(leftX,yLeft,'Bayaran Balik Tuntutan Perubatan',formatRM(slip.medical_claims));yLeft+=6;}
 
     rowLine(rightX,yRight,`Caruman KWSP Pekerja (${eeRate}%)`,formatRM(slip.epf_employee));yRight+=6;
-    rowLine(rightX,yRight,'Caruman PERKESO Pekerja',formatRM(slip.socso_employee));yRight+=6;
+    const pdfSocsoLabel=Number(details.calculation?.socso_skbbk_employee||0)>0?'Caruman PERKESO Pekerja (+ SKBBK)':'Caruman PERKESO Pekerja';
+    rowLine(rightX,yRight,pdfSocsoLabel,formatRM(slip.socso_employee));yRight+=6;
     rowLine(rightX,yRight,'Caruman SIP (EIS) Pekerja',formatRM(slip.eis_employee));yRight+=6;
     if(Number(slip.pcb_amount)>0){rowLine(rightX,yRight,'Potongan Cukai Bulanan (PCB)',formatRM(slip.pcb_amount));yRight+=6;}
     const otherDeds=parseOtherDeductions(details.other_deductions);
@@ -1687,8 +1694,9 @@ function openPayslipModal(slipId){
   }catch{details={}}
 
   const prof=details.profile||{};
-  const eeRate=prof.epf_employee_rate||11;
-  const erRate=prof.epf_employer_rate||13;
+  const eeRate=(prof.epf_employee_rate!==undefined&&prof.epf_employee_rate!==null)?Number(prof.epf_employee_rate):11;
+  const rawErRate=(prof.epf_employer_rate!==undefined&&prof.epf_employer_rate!==null)?Number(prof.epf_employer_rate):13;
+  const erRate=(Number(slip.gross_salary)>5000&&rawErRate===13)?12:rawErRate;
 
   const contentHtml=`
     <div class="payslip-card" id="payslip-print-area">
@@ -1753,7 +1761,7 @@ function openPayslipModal(slipId){
             <b>${formatRM(slip.epf_employee)}</b>
           </div>
           <div class="payslip-row">
-            <span>Caruman PERKESO Pekerja</span>
+            <span>Caruman PERKESO Pekerja${(()=>{const c=details.calculation||{};const sk=Number(c.socso_skbbk_employee||0);const inv=Number(c.socso_invalidity_employee||0);return sk>0?`<small style="display:block;font-size:10px;color:var(--muted)">${inv>0?`Keilatan ${formatRM(inv)} + SKBBK ${formatRM(sk)}`:`LINDUNG 24 Jam / SKBBK ${formatRM(sk)}`}</small>`:'';})()}</span>
             <b>${formatRM(slip.socso_employee)}</b>
           </div>
           <div class="payslip-row">
@@ -1830,7 +1838,7 @@ function openProcessPayrollDialog(){
   open(`Proses Penggajian — ${formatMyMonthYear(ym)}`,`
     <p class="dialog-copy">Sistem akan menjana slip gaji bagi semua staf tetap aktif (Guru & Admin) untuk bulan <strong>${formatMyMonthYear(ym)}</strong>:</p>
     <ul style="font-size:12px;color:var(--ink);line-height:1.6;margin:0 0 14px;padding-left:18px">
-      <li>Mengira Gaji Asas, Elaun Tetap serta potongan KWSP, PERKESO, SIP (EIS), PCB &amp; potongan lain-lain.</li>
+      <li>Mengira Gaji Asas, Elaun Tetap serta potongan Jadual Ketiga KWSP, PERKESO (+ LINDUNG 24 Jam), SIP (EIS), PCB &amp; potongan lain-lain.</li>
       <li>Memasukkan <strong>${pendingClaims.length} tuntutan perubatan</strong> yang telah diluluskan ke dalam slip gaji 27hb.</li>
       <li>Jika bulan ini pernah diproses, slip akan dikemas kini tanpa menghilangkan tuntutan perubatan bulan tersebut.</li>
     </ul>
@@ -2190,6 +2198,7 @@ document.addEventListener('submit',async e=>{
         epf_employer_rate:f.get('epf_employer_rate'),
         socso_category:f.get('socso_category'),
         eis_active:f.get('eis_active')?1:0,
+        skbbk_active:f.get('skbbk_active')?1:0,
         monthly_pcb:f.get('monthly_pcb'),
         other_deductions:otherDeductions
       });

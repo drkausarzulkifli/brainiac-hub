@@ -541,6 +541,7 @@ if($method==='POST' && $action==='admin_payroll_profile_save') {
     $epfErRate=(float)($b['epf_employer_rate']??13.00);
     $socsoCat=trim((string)($b['socso_category']??'cat1'));
     $eisActive=!empty($b['eis_active'])?1:0;
+    $skbbkActive=isset($b['skbbk_active'])?(!empty($b['skbbk_active'])?1:0):1;
     $pcb=max(0,(float)($b['monthly_pcb']??0.00));
 
     $rawOther=$b['other_deductions']??[];
@@ -570,12 +571,12 @@ if($method==='POST' && $action==='admin_payroll_profile_save') {
 
     $existing=query('SELECT id FROM hub_staff_payroll_profiles WHERE user_id=?',[$userId])->fetch();
     if($existing){
-        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,monthly_pcb=?,other_deductions_json=?,updated_at=? WHERE id=?',
-            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,$otherJson,stamp(),$existing['id']]);
+        query('UPDATE hub_staff_payroll_profiles SET ic_no=?,epf_no=?,socso_no=?,income_tax_no=?,bank_name=?,bank_acc_no=?,basic_salary=?,fixed_allowance=?,epf_employee_rate=?,epf_employer_rate=?,socso_category=?,eis_active=?,skbbk_active=?,monthly_pcb=?,other_deductions_json=?,updated_at=? WHERE id=?',
+            [$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),$existing['id']]);
     }else{
         $id=uid();
-        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,monthly_pcb,other_deductions_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$pcb,$otherJson,stamp(),stamp()]);
+        query('INSERT INTO hub_staff_payroll_profiles(id,user_id,ic_no,epf_no,socso_no,income_tax_no,bank_name,bank_acc_no,basic_salary,fixed_allowance,epf_employee_rate,epf_employer_rate,socso_category,eis_active,skbbk_active,monthly_pcb,other_deductions_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            [$id,$userId,$ic,$epf,$socso,$tax,$bank,$bankAcc,$basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive,$pcb,$otherJson,stamp(),stamp()]);
     }
     audit('admin_payroll_profile_save',['user_id'=>$userId,'basic'=>$basic,'other_deductions_count'=>count($otherDeductions)],$u['id']);
     reply(['ok'=>true,'message'=>'Profil gaji staf berjaya disimpan.']);
@@ -613,7 +614,8 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         $epfEeRate=$prof?(float)$prof['epf_employee_rate']:11.00;
         $epfErRate=$prof?(float)$prof['epf_employer_rate']:13.00;
         $socsoCat=$prof?$prof['socso_category']:'cat1';
-        $eisActive=$prof?(bool)$prof['eis_active']:true;
+        $eisActive=$prof?(bool)(int)$prof['eis_active']:true;
+        $skbbkActive=($prof&&array_key_exists('skbbk_active',$prof))?(bool)(int)$prof['skbbk_active']:true;
         $pcb=$prof?(float)$prof['monthly_pcb']:0.00;
 
         $rawOther=json_decode((string)($prof['other_deductions_json']??'[]'),true);
@@ -634,7 +636,7 @@ if($method==='POST' && $action==='admin_payroll_run_process') {
         $claimSum=0.0;
         foreach($approvedClaims as $cl){$claimSum+=(float)$cl['amount'];}
 
-        $calc=calculateStatutoryContributions($basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive);
+        $calc=calculateStatutoryContributions($basic,$allowance,$epfEeRate,$epfErRate,$socsoCat,$eisActive,$skbbkActive);
         $gross=$calc['gross'];
         $totDeductions=round($calc['epf_employee']+$calc['socso_employee']+$calc['eis_employee']+$pcb+$otherDedSum,2);
         $net=round(($gross+$claimSum)-$totDeductions,2);

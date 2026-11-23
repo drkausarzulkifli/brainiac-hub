@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS hub_staff_payroll_profiles (
  epf_employer_rate DECIMAL(4,2) NOT NULL DEFAULT 13.00,
  socso_category VARCHAR(10) NOT NULL DEFAULT 'cat1',
  eis_active INT NOT NULL DEFAULT 1,
+ skbbk_active INT NOT NULL DEFAULT 1,
  monthly_pcb DECIMAL(10,2) NOT NULL DEFAULT 0.00,
  other_deductions_json LONGTEXT DEFAULT NULL,
  created_at VARCHAR(30) NOT NULL,
