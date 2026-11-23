@@ -1444,11 +1444,105 @@ function renderAdminPayrollProfilesSection(){
   `;
 }
 
+function calcStatutoryPreview(basic,allowance,epfEeRate=11,epfErRate=13,socsoCat='cat1',eisActive=true,skbbkActive=true){
+  const gross=Math.round(Math.max(0,Number(basic||0)+Number(allowance||0))*100)/100;
+  const grossCents=Math.round(gross*100);
+  if(grossCents<=0){
+    return {gross:0,epf_employee:0,epf_employer:0,socso_employee:0,socso_employer:0,eis_employee:0,eis_employer:0};
+  }
+  const actualEpfErRate=(grossCents>500000&&Number(epfErRate)===13)?12:Number(epfErRate);
+  let epfBandUpper=0;
+  if(grossCents>1000){
+    if(grossCents<=500000)epfBandUpper=Math.max(20,Math.trunc((grossCents+1999)/2000)*20);
+    else if(grossCents<=2000000)epfBandUpper=Math.trunc((grossCents+9999)/10000)*100;
+    else epfBandUpper=gross;
+  }
+  const calcEpf=rate=>{
+    const r=Number(rate||0);
+    if(r<=0)return 0;
+    if(Math.abs(r-2)<0.001)return Math.ceil(Number((gross*(r/100)).toFixed(6)));
+    if(grossCents<=1000)return 0;
+    return Math.ceil(Number((epfBandUpper*(r/100)).toFixed(6)));
+  };
+  const table=[
+    [3000,0.40,0.10,0.20,0.30,0.05],
+    [5000,0.70,0.20,0.30,0.50,0.10],
+    [7000,1.10,0.30,0.50,0.80,0.15],
+    [10000,1.50,0.40,0.65,1.10,0.20],
+    [14000,2.10,0.60,0.90,1.50,0.25],
+    [20000,2.95,0.85,1.25,2.10,0.35],
+    [30000,4.35,1.25,1.85,3.10,0.50]
+  ];
+  for(let band=4;band<=60;band++){
+    const idx=band-4,pairs=Math.trunc(idx/2),odd=idx%2;
+    table.push([
+      band*10000,
+      (615+pairs*350+odd*170)/100,
+      (175+idx*50)/100,
+      (265+pairs*150+odd*70)/100,
+      (440+pairs*250+odd*120)/100,
+      (70+idx*20)/100
+    ]);
+  }
+  const matched=table.find(r=>grossCents<=r[0])||table[table.length-1];
+  const [,cat1Er,cat1EeInv,skbbkEe,cat2Er,eisEach]=matched;
+  const socsoInv=socsoCat==='cat1'?cat1EeInv:0;
+  const socsoSkbbk=skbbkActive?skbbkEe:0;
+  return {
+    gross,
+    epf_employee:calcEpf(epfEeRate),
+    epf_employer:calcEpf(actualEpfErRate),
+    socso_employee:Math.round((socsoInv+socsoSkbbk)*100)/100,
+    socso_employer:socsoCat==='cat1'?cat1Er:cat2Er,
+    eis_employee:eisActive?eisEach:0,
+    eis_employer:eisActive?eisEach:0
+  };
+}
+
+function updatePayrollProfilePreview(){
+  const form=document.querySelector('#admin-payroll-profile-form');
+  const box=document.querySelector('#payroll-prof-preview');
+  if(!form||!box)return;
+  const num=sel=>Math.max(0,Number(form.querySelector(sel)?.value||0)||0);
+  const basic=num('input[name="basic_salary"]');
+  const fixAllow=num('input[name="fixed_allowance"]');
+  const travAllow=num('input[name="travelling_allowance"]');
+  const pcb=num('input[name="monthly_pcb"]');
+  const epfEeRate=Number(form.querySelector('input[name="epf_employee_rate"]')?.value||11);
+  const epfErRate=Number(form.querySelector('input[name="epf_employer_rate"]')?.value||13);
+  const socsoCat=form.querySelector('select[name="socso_category"]')?.value||'cat1';
+  const eisActive=Boolean(form.querySelector('input[name="eis_active"]')?.checked);
+  const skbbkActive=Boolean(form.querySelector('input[name="skbbk_active"]')?.checked);
+  let otherTot=0;
+  for(const row of form.querySelectorAll('.other-deduction-row')){
+    otherTot+=Math.max(0,Number(row.querySelector('.other-ded-amt')?.value||0)||0);
+  }
+  const c=calcStatutoryPreview(basic,fixAllow,epfEeRate,epfErRate,socsoCat,eisActive,skbbkActive);
+  const grossTotal=basic+fixAllow+travAllow;
+  const totDed=c.epf_employee+c.socso_employee+c.eis_employee+pcb+otherTot;
+  const net=grossTotal-totDed;
+  box.innerHTML=`
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-weight:700;color:#0d6955">
+      <span>Pratinjau Kiraan Mengikut Jadual KWSP &amp; PERKESO 2026</span>
+      <span>Gaji Bersih: ${formatRM(net)}</span>
+    </div>
+    <div class="payroll-preview-grid">
+      <div>Asas Statutori (Asas + Tetap): <b>${formatRM(c.gross)}</b></div>
+      <div>Pendapatan Kasar (+ Perjalanan): <b>${formatRM(grossTotal)}</b></div>
+      <div>KWSP Pekerja / Majikan: <b>${formatRM(c.epf_employee)} / ${formatRM(c.epf_employer)}</b></div>
+      <div>PERKESO Pekerja / Majikan: <b>${formatRM(c.socso_employee)} / ${formatRM(c.socso_employer)}</b></div>
+      <div>SIP (EIS) Pekerja / Majikan: <b>${formatRM(c.eis_employee)} / ${formatRM(c.eis_employer)}</b></div>
+      <div>Jumlah Potongan (+ PCB &amp; Lain): <b style="color:var(--red)">-${formatRM(totDed)}</b></div>
+    </div>
+  `;
+}
+
 function openEditPayrollProfileDialog(userId){
   const users=adminPayrollDataState.users;
   const targetUser=users.find(u=>u.id===userId);
   const existing=adminPayrollDataState.profiles.find(p=>p.user_id===userId)||{};
   const otherList=parseOtherDeductions(existing.other_deductions_json);
+  const fmtOpt=v=>Number(v||0)>0?Number(v).toFixed(2):'';
 
   open(`Profil Gaji — ${esc(targetUser?.name||'')}`,`
     <form id="admin-payroll-profile-form">
@@ -1494,28 +1588,28 @@ function openEditPayrollProfileDialog(userId){
 
       <div class="form-grid">
         <label class="field">Gaji Asas Bulanan (RM) <span style="color:var(--red)">*</span>
-          <input type="number" name="basic_salary" step="0.01" min="0" required placeholder="0.00" value="${existing.basic_salary||''}">
+          <input type="number" name="basic_salary" step="0.01" min="0" required placeholder="0.00" value="${fmtOpt(existing.basic_salary)}">
         </label>
         <label class="field">Elaun Tetap Berkanun (RM) <small style="font-size:10.5px;color:var(--muted);font-weight:400">(Kena KWSP, PERKESO &amp; SIP)</small>
-          <input type="number" name="fixed_allowance" step="0.01" min="0" placeholder="0.00" value="${existing.fixed_allowance||'0.00'}">
+          <input type="number" name="fixed_allowance" step="0.01" min="0" placeholder="0.00" value="${fmtOpt(existing.fixed_allowance)}">
         </label>
       </div>
 
       <div class="form-grid">
         <label class="field">Elaun Perjalanan / Travelling (RM) <small style="font-size:10.5px;color:var(--muted);font-weight:400">(Dikecualikan KWSP, PERKESO &amp; SIP)</small>
-          <input type="number" name="travelling_allowance" step="0.01" min="0" placeholder="0.00" value="${existing.travelling_allowance||'0.00'}">
+          <input type="number" name="travelling_allowance" step="0.01" min="0" placeholder="0.00" value="${fmtOpt(existing.travelling_allowance)}">
         </label>
         <label class="field">Potongan Cukai Bulanan (PCB)
-          <input type="number" name="monthly_pcb" step="0.01" min="0" placeholder="0.00" value="${existing.monthly_pcb||'0.00'}">
+          <input type="number" name="monthly_pcb" step="0.01" min="0" placeholder="0.00" value="${fmtOpt(existing.monthly_pcb)}">
         </label>
       </div>
 
       <div class="form-grid">
         <label class="field">Kadar KWSP Pekerja (%)
-          <input type="number" name="epf_employee_rate" step="0.5" value="${existing.epf_employee_rate||11.0}">
+          <input type="number" name="epf_employee_rate" step="0.5" value="${existing.epf_employee_rate??11.0}">
         </label>
         <label class="field">Kadar KWSP Majikan (%)
-          <input type="number" name="epf_employer_rate" step="0.5" value="${existing.epf_employer_rate||13.0}">
+          <input type="number" name="epf_employer_rate" step="0.5" value="${existing.epf_employer_rate??13.0}">
         </label>
       </div>
 
@@ -1549,6 +1643,7 @@ function openEditPayrollProfileDialog(userId){
         </div>
       </div>
 
+      <div id="payroll-prof-preview" class="payroll-preview-box"></div>
       <p id="admin-payroll-prof-error" role="alert" style="color:var(--red);font-size:12px;margin:8px 0"></p>
       <div class="dialog-actions">
         <button class="secondary" type="button" data-cancel>Batal</button>
@@ -1556,6 +1651,7 @@ function openEditPayrollProfileDialog(userId){
       </div>
     </form>
   `);
+  updatePayrollProfilePreview();
 }
 
 function findPayslipById(slipId){
@@ -2003,13 +2099,26 @@ document.addEventListener('click',async e=>{
     if(list&&!list.querySelector('.other-deduction-row')){
       list.innerHTML='<p id="other-ded-empty" style="margin:0;font-size:11px;color:var(--muted)">Tiada potongan lain-lain ditetapkan.</p>';
     }
+    updatePayrollProfilePreview();
   }
   if(b.dataset.viewPayslip){
     openPayslipModal(b.dataset.viewPayslip);
   }
 });
 
+document.addEventListener('input',e=>{
+  if(e.target?.closest?.('#admin-payroll-profile-form'))updatePayrollProfilePreview();
+});
+
+document.addEventListener('wheel',e=>{
+  if(e.target?.type==='number'&&e.target.closest?.('#admin-payroll-profile-form')){
+    e.preventDefault();
+    e.target.blur();
+  }
+},{passive:false});
+
 document.addEventListener('change',async e=>{
+  if(e.target?.closest?.('#admin-payroll-profile-form'))updatePayrollProfilePreview();
   if(e.target.id==='payroll-month-select'){
     selectedPayrollMonth=e.target.value;
     await payrollWorkspace();

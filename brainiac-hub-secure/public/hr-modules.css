@@ -55,6 +55,9 @@
   .other-deduction-row{grid-template-columns:1fr auto}
   .other-deduction-row .other-ded-desc-wrap{grid-column:1 / -1}
 }
+.payroll-preview-box{margin:12px 0 8px;padding:10px 12px;border:1px solid #cce3dc;border-radius:10px;background:#f4fbf8;font-size:11.5px;color:var(--ink)}
+.payroll-preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:6px}
+@media(max-width:600px){.payroll-preview-grid{grid-template-columns:1fr}}
 
 @media print{
   body *{visibility:hidden}
