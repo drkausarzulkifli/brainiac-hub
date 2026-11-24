@@ -371,10 +371,36 @@ async function attendanceWorkspace(){
   return staffAttendanceWorkspace();
 }
 
+let studentAttendanceDate='';
+function getStudentAttendanceDate(){if(!studentAttendanceDate)studentAttendanceDate=typeof malaysiaToday==='function'?malaysiaToday():new Date().toISOString().slice(0,10);return studentAttendanceDate;}
+function studentBalanceBadgeForProg(studentId,programme,dateStr){
+  if(typeof StudentPackages==='undefined'||typeof studentRoster!=='function')return '';
+  const st=studentRoster().find(x=>x.id===studentId||x.name===studentId);
+  if(!st)return '';
+  const ym=StudentPackages.monthFromDate(dateStr);
+  const sum=StudentPackages.getStudentBalanceSummary(st,ym);
+  const b=sum[programme];
+  if(!b)return '';
+  if(b.total===0&&b.overQuota===0)return `<span class="badge">Tiada pakej ${StudentPackages.PROG_LABELS[programme]}</span>`;
+  return `<span class="badge ${b.remaining===0?'amber':'green'}">Baki ${StudentPackages.PROG_LABELS[programme]}: ${b.remaining}/${b.total}${b.overQuota?` (+${b.overQuota} lebih)`:''}</span>`;
+}
 function renderStudentAttendanceSection(){
-  const total=data.sessions.length;
-  const present=data.sessions.filter(s=>s.attendance==='Hadir'||s.status==='Selesai').length;
-  const absent=data.sessions.filter(s=>s.attendance==='Tidak hadir'||s.status==='Tidak hadir').length;
+  const selDate=getStudentAttendanceDate();
+  const bookings=(typeof plannerBookings==='function'?plannerBookings():[]).filter(b=>b.date===selDate&&b.students?.length);
+  const bookingItems=[];
+  for(const b of bookings){
+    for(const sid of b.students){
+      const stName=typeof plannerStudentName==='function'?plannerStudentName(sid):sid;
+      const att=b.attendance?.[sid]||'Belum ditanda';
+      bookingItems.push({key:b.key,studentId:sid,studentName:stName,mode:b.mode,time:typeof slotLabel==='function'?slotLabel(b.mode,b.time):b.time,staff:b.staff,att,programmeLabel:typeof plannerPrograms!=='undefined'?plannerPrograms[b.mode]:b.mode});
+    }
+  }
+  const legacyItems=data.sessions.map(s=>({id:s.id,studentId:s.name,studentName:s.name,mode:s.programme==='EIP'?'eip':s.programme?.includes('Pertuturan')?'speech':'ot',time:s.time,staff:s.staff,att:s.attendance||(s.status==='Selesai'?'Hadir':'Belum ditanda'),programmeLabel:s.programme,replacement:s.replacement}));
+
+  const allItems=[...bookingItems,...legacyItems];
+  const total=allItems.length;
+  const present=allItems.filter(x=>x.att==='Hadir').length;
+  const absent=allItems.filter(x=>x.att==='Tidak hadir').length;
   const pending=Math.max(0,total-present-absent);
 
   return `
@@ -382,7 +408,7 @@ function renderStudentAttendanceSection(){
       <div class="att-stat-card">
         <div class="att-stat-label">Jumlah Sesi Pelajar ${icon('calendar')}</div>
         <div class="att-stat-num">${total}</div>
-        <div class="att-stat-sub">Sesi kelas EIP & terapi</div>
+        <div class="att-stat-sub">Sesi kelas EIP & terapi (${esc(selDate)})</div>
       </div>
       <div class="att-stat-card">
         <div class="att-stat-label">Hadir / Selesai ${icon('check')}</div>
@@ -392,31 +418,48 @@ function renderStudentAttendanceSection(){
       <div class="att-stat-card">
         <div class="att-stat-label">Tidak Hadir / Perlu Ganti ${icon('refresh')}</div>
         <div class="att-stat-num" style="color:#94631a">${absent}</div>
-        <div class="att-stat-sub">Dijadualkan untuk sesi ganti</div>
+        <div class="att-stat-sub">Tiada tolakan baki</div>
       </div>
     </div>
     <section class="panel">
       <div class="panel-head">
         <div>
           <h2>Kehadiran Sesi Pelajar</h2>
-          <p>Tandakan status kehadiran pelajar untuk sesi kelas EIP & terapi hari ini.</p>
+          <p>Klik <b>Hadir</b> untuk menolak baki sesi pelajar secara automatik.</p>
         </div>
-        <button class="secondary" type="button" data-go="sessions">${icon('calendar')} Buka Jadual Sesi</button>
+        <div class="record-actions">
+          <label class="field" style="margin:0"><input type="date" id="student-att-date" value="${esc(selDate)}" aria-label="Tarikh kehadiran pelajar"></label>
+          <button class="secondary" type="button" data-go="sessions">${icon('calendar')} Buka Jadual Sesi</button>
+        </div>
       </div>
       <div class="records">
-        ${data.sessions.map(s=>`
+        ${bookingItems.map(item=>`
           <div class="record">
             <div>
-              <h3>${esc(s.name)}</h3>
-              <p>${esc(s.time)} • ${esc(s.programme)} • ${esc(s.staff)}</p>
-              ${badge(s.attendance||(s.status==='Selesai'?'Hadir':'Belum ditanda'))}${s.replacement?' <span class="badge amber">Perlu sesi ganti</span>':''}
+              <h3>${esc(item.studentName)}</h3>
+              <p>${esc(item.time)} • ${esc(item.programmeLabel)} • ${esc(item.staff)}</p>
+              <div class="pkg-balance-row">${badge(item.att)} ${studentBalanceBadgeForProg(item.studentId,item.mode,selDate)}</div>
             </div>
             <div class="record-actions">
-              <button class="secondary" data-attend="${s.id}" data-value="Hadir">Hadir</button>
-              <button class="secondary" data-attend="${s.id}" data-value="Tidak hadir">Tidak hadir</button>
+              <button class="${item.att==='Hadir'?'primary':'secondary'}" data-attend-booking="${esc(item.key)}" data-student-id="${esc(item.studentId)}" data-value="Hadir">Hadir</button>
+              <button class="${item.att==='Tidak hadir'?'primary':'secondary'}" data-attend-booking="${esc(item.key)}" data-student-id="${esc(item.studentId)}" data-value="Tidak hadir">Tidak hadir</button>
             </div>
           </div>
-        `).join('')||'<p class="empty">Tiada sesi pelajar dijadualkan hari ini. Gunakan Jadual Sesi untuk menambah slot pelajar.</p>'}
+        `).join('')}
+        ${legacyItems.map(item=>`
+          <div class="record">
+            <div>
+              <h3>${esc(item.studentName)}</h3>
+              <p>${esc(item.time)} • ${esc(item.programmeLabel)} • ${esc(item.staff)}</p>
+              <div class="pkg-balance-row">${badge(item.att)}${item.replacement?' <span class="badge amber">Perlu sesi ganti</span>':''} ${studentBalanceBadgeForProg(item.studentId,item.mode,selDate)}</div>
+            </div>
+            <div class="record-actions">
+              <button class="${item.att==='Hadir'?'primary':'secondary'}" data-attend="${item.id}" data-value="Hadir">Hadir</button>
+              <button class="${item.att==='Tidak hadir'?'primary':'secondary'}" data-attend="${item.id}" data-value="Tidak hadir">Tidak hadir</button>
+            </div>
+          </div>
+        `).join('')}
+        ${!allItems.length?'<p class="empty">Tiada sesi pelajar dijadualkan pada tarikh ini. Gunakan Jadual Sesi untuk menambah slot pelajar.</p>':''}
       </div>
     </section>`;
 }
@@ -1299,6 +1342,37 @@ document.addEventListener('click',async e=>{
     }finally{
       b.disabled=false;
     }
+  }
+  if(b.dataset.attendBooking){
+    const key=b.dataset.attendBooking,sid=b.dataset.studentId,val=b.dataset.value;
+    const before=structuredClone(data);
+    const booking=(data.datedBookings||[]).find(x=>x.key===key);
+    if(!booking)return;
+    if(!booking.attendance||typeof booking.attendance!=='object')booking.attendance={};
+    booking.attendance[sid]=val;
+    if(typeof StudentPackages!=='undefined'){
+      const stName=typeof plannerStudentName==='function'?plannerStudentName(sid):sid;
+      StudentPackages.syncStudentSessionAttendance(sid,{
+        sourceKey:booking.key,
+        programme:booking.mode,
+        date:booking.date,
+        attendance:val,
+        staff:booking.staff||'',
+        time:booking.time||'',
+        title:(typeof plannerPrograms!=='undefined'?plannerPrograms[booking.mode]:booking.mode)||'',
+        studentName:stName
+      });
+    }
+    if(!(await save())){data=before;return;}
+    render();
+    notify(val==='Hadir'?'Kehadiran ditandakan Hadir dan baki sesi ditolak.':'Kehadiran ditandakan Tidak hadir (baki sesi dikekalkan).');
+  }
+});
+
+document.addEventListener('change',e=>{
+  if(e.target.id==='student-att-date'&&e.target.value){
+    studentAttendanceDate=e.target.value;
+    if(page==='attendance')studentAttendanceWorkspace();
   }
 });
 
