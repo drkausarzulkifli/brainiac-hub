@@ -10,4 +10,6 @@ body:not([data-auth="login"]) #login-screen,body:not([data-auth="password"]) #pa
 .auth-loading{padding:36px;text-align:center}body[data-auth] .auth-loading{display:none}
 #network-dialog{max-width:360px}#network-dialog::backdrop{background:#00203f55}
 button:disabled{cursor:wait;opacity:.65}
+#account-form .account-check{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;margin:12px 0;cursor:pointer}
+#account-form .account-check input[type="checkbox"]{width:18px;height:18px;min-height:0;padding:0;margin:0;flex-shrink:0;accent-color:var(--teal)}
 @media(max-width:480px){.auth-card{padding:24px}.auth-screen{padding:16px}}

@@ -1060,7 +1060,7 @@ function openAdminAttendanceDialog(recordId=null){
 
   open(isEdit?'Sunting Rekod Kehadiran (Audit Pelarasan)':'Tambah Rekod Kehadiran Manual',`
     <form id="admin-attendance-form">
-      <input type="hidden" name="id" value="${esc(rec.id)}">
+      <input type="hidden" name="record_id" value="${esc(rec.id)}">
       <label class="field">Pilih Staf
         <select name="user_id" required>
           ${adminAttendanceUsers.map(u=>`<option value="${esc(u.id)}" ${rec.user_id===u.id?'selected':''}>${esc(u.name)} (${esc(demoRoles[u.role]||u.role)})</option>`).join('')}
@@ -1122,7 +1122,7 @@ async function handleAdminAttendanceSave(e){
 
   try{
     const f=new FormData(form);
-    const id=f.get('id');
+    const id=f.get('record_id')||f.get('id')||'';
     const userId=f.get('user_id');
     const workDate=f.get('work_date');
     const timeIn=f.get('time_in');
@@ -1303,7 +1303,8 @@ document.addEventListener('click',async e=>{
 });
 
 document.addEventListener('submit',async e=>{
-  if(e.target.id==='clock-in-form'){
+  const formId=e.target.getAttribute?.('id')||'';
+  if(formId==='clock-in-form'){
     e.preventDefault();
     const btn=e.target.querySelector('button[type="submit"]');
     btn.disabled=true;
@@ -1329,7 +1330,7 @@ document.addEventListener('submit',async e=>{
     }
   }
 
-  if(e.target.id==='clock-out-form'){
+  if(formId==='clock-out-form'){
     e.preventDefault();
     const btn=e.target.querySelector('button[type="submit"]');
     btn.disabled=true;
@@ -1351,7 +1352,7 @@ document.addEventListener('submit',async e=>{
     }
   }
 
-  if(e.target.id==='hr-settings-form'){
+  if(formId==='hr-settings-form'){
     e.preventDefault();
     const btn=e.target.querySelector('button[type="submit"]');
     btn.disabled=true;
@@ -1381,7 +1382,7 @@ document.addEventListener('submit',async e=>{
     }
   }
 
-  if(e.target.id==='att-filter-form'){
+  if(formId==='att-filter-form'){
     e.preventDefault();
     const f=new FormData(e.target);
     attendanceFilter.from=f.get('from')||'';
@@ -1392,7 +1393,7 @@ document.addEventListener('submit',async e=>{
     await staffAttendanceWorkspace();
   }
 
-  if(e.target.id==='admin-attendance-form'){
+  if(formId==='admin-attendance-form'){
     await handleAdminAttendanceSave(e);
   }
 });

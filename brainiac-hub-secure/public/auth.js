@@ -50,17 +50,18 @@ async function enterApp(user){
  resetIdleTimer();
 }
 document.addEventListener('submit',async e=>{
- if(e.target.id==='auth-form'){
+ const formId=e.target.getAttribute?.('id')||'';
+ if(formId==='auth-form'){
   e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;button.textContent='Sedang log masuk…';
   try{const fresh=await api('session');csrfToken=fresh.csrf;const r=await api('login',{email:document.querySelector('#auth-email').value,password:document.querySelector('#auth-password').value});csrfToken=r.csrf;document.querySelector('#auth-password').value='';await enterApp(r.user)}catch(err){document.querySelector('#auth-message').textContent=err.message}finally{button.disabled=false;button.textContent='Log masuk'}
  }
- if(e.target.id==='password-form'){
+ if(formId==='password-form'){
   e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;
   try{const f=new FormData(e.target);if(f.get('password')!==f.get('confirm'))throw Error('Pengesahan kata laluan tidak sepadan.');await api('password',{current:f.get('current'),password:f.get('password')});e.target.reset();currentUser=null;await secureBoot()}catch(err){document.querySelector('#password-message').textContent=err.message}finally{button.disabled=false}
  }
- if(e.target.id==='account-form'){
-  e.preventDefault();const button=e.target.querySelector('button[type="submit"]');button.disabled=true;
-  try{const f=new FormData(e.target);await api('users',{id:f.get('id')||'',name:f.get('name'),email:f.get('email'),role:f.get('role'),active:f.get('active')==='on',password:f.get('password')});dialog.close();await accountUsers();showSaveFeedback(true,'Akaun pengguna berjaya disimpan.')}catch(err){document.querySelector('#account-error').textContent=err.message}finally{button.disabled=false}
+ if(formId==='account-form'){
+  e.preventDefault();const button=e.target.querySelector('button[type="submit"]');const errEl=document.querySelector('#account-error');if(errEl)errEl.textContent='';button.disabled=true;
+  try{const f=new FormData(e.target);const accountId=String(f.get('account_id')||'').trim();const pwd=String(f.get('password')||'');if(!accountId&&pwd.length<12)throw Error('Kata laluan sementara mesti sekurang-kurangnya 12 aksara.');if(accountId&&pwd!==''&&pwd.length<12)throw Error('Kata laluan baharu mesti sekurang-kurangnya 12 aksara.');await api('users',{id:accountId,name:String(f.get('name')||'').trim(),email:String(f.get('email')||'').trim(),role:String(f.get('role')||'teacher'),active:f.get('active')==='on',password:pwd});dialog.close();await accountUsers();showSaveFeedback(true,'Akaun pengguna berjaya disimpan.')}catch(err){if(errEl)errEl.textContent=err.message;else notify(err.message)}finally{button.disabled=false}
  }
 });
 let accountList=[];
@@ -69,7 +70,7 @@ async function accountUsers(){
 }
 function accountForm(id=''){
  const u=accountList.find(u=>u.id===id)||{id:'',name:'',email:'',role:'teacher',active:1};
- dialog.close();open(u.id?'Ubah akaun':'Tambah akaun',`<form id="account-form"><input type="hidden" name="id" value="${esc(u.id)}"><label class="field">Nama<input name="name" required maxlength="120" value="${esc(u.name)}"></label><label class="field">Emel login<input name="email" type="email" required maxlength="190" autocomplete="off" value="${esc(u.email)}"></label><label class="field">Peranan<select name="role">${Object.entries(demoRoles).map(([v,label])=>`<option value="${v}" ${u.role===v?'selected':''}>${label}</option>`).join('')}</select></label><label class="field">Kata laluan sementara${u.id?' (kosongkan untuk kekalkan)':''}<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="72" ${u.id?'':'required'}></label><p>Pengguna perlu menukar kata laluan sementara pada login pertama. Kongsikan melalui saluran peribadi.</p><label><input type="checkbox" name="active" ${Number(u.active)?'checked':''}> Akaun aktif</label><p id="account-error" role="alert"></p><div class="dialog-actions"><button class="secondary" type="button" data-discard-dialog>Batal</button><button class="primary" type="submit">Simpan akaun</button></div></form>`);
+ dialog.close();open(u.id?'Ubah akaun':'Tambah akaun',`<form id="account-form"><input type="hidden" name="account_id" value="${esc(u.id)}"><label class="field">Nama<input name="name" required maxlength="120" value="${esc(u.name)}"></label><label class="field">Emel login<input name="email" type="email" required maxlength="190" autocomplete="off" value="${esc(u.email)}"></label><label class="field">Peranan<select name="role">${Object.entries(demoRoles).map(([v,label])=>`<option value="${v}" ${u.role===v?'selected':''}>${label}</option>`).join('')}</select></label><label class="field">Kata laluan sementara${u.id?' (kosongkan untuk kekalkan)':' (minimum 12 aksara)'}<input name="password" type="password" autocomplete="new-password" minlength="12" maxlength="72" ${u.id?'':'required'} placeholder="Minimum 12 aksara"></label><p>Pengguna perlu menukar kata laluan sementara pada login pertama. Kongsikan melalui saluran peribadi.</p><label class="account-check"><input type="checkbox" name="active" ${Number(u.active)?'checked':''}> <span>Akaun aktif</span></label><p id="account-error" role="alert"></p><div class="dialog-actions"><button class="secondary" type="button" data-discard-dialog>Batal</button><button class="primary" type="submit">Simpan akaun</button></div></form>`);
 }
 async function loadBackupSummary(selector){
  const el=document.querySelector(selector);if(!el)return;

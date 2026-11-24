@@ -22,7 +22,7 @@ function demoActionModule(el){
 }
 // Registered before application handlers so forbidden UI events cannot mutate records.
 document.addEventListener('click',e=>{const el=e.target.closest('button,a'),module=demoActionModule(el);if(module&&!demoCanAccess(module)){e.preventDefault();e.stopImmediatePropagation();demoDeny()}},true);
-document.addEventListener('submit',e=>{let module=demoFormModules[e.target.id];if(e.target.id==='note-form'){const s=data.sessions.find(s=>s.id===Number(e.target.dataset.id));module=s?.programme==='EIP'?'class-notes':'therapy-sessions'}if(module&&!demoCanAccess(module)){e.preventDefault();e.stopImmediatePropagation();demoDeny()}},true);
+document.addEventListener('submit',e=>{const formId=e.target.getAttribute?.('id')||'';let module=demoFormModules[formId];if(formId==='note-form'){const s=data.sessions.find(s=>s.id===Number(e.target.dataset.id));module=s?.programme==='EIP'?'class-notes':'therapy-sessions'}if(module&&!demoCanAccess(module)){e.preventDefault();e.stopImmediatePropagation();demoDeny()}},true);
 function applyDemoAccess(){
  const select=document.querySelector('#demo-role');if(select)select.value=demoRole;
  document.querySelectorAll('[data-access]').forEach(el=>el.hidden=!demoCanAccess(el.dataset.access));
