@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Panduan Pengguna • Brainiac Hub (Beruntung Brainiac)</title>
+  <meta name="description" content="Panduan Pengguna Lengkap Brainiac Hub untuk Admin, Cikgu EIP dan Terapis.">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
+    :root {
+      --bg: #f5f7f8;
+      --card: #ffffff;
+      --ink: #1d3339;
+      --muted: #586c72;
+      --line: #e2e9eb;
+      --teal: #116e65;
+      --teal-dark: #0d514b;
+      --navy: #00203f;
+      --soft: #e9f4ef;
+      --amber: #94631a;
+      --amber-bg: #fff5df;
+      --purple: #6c5590;
+      --purple-bg: #f2edf9;
+      --blue: #2f5e8d;
+      --blue-bg: #edf3fa;
+      --red: #a64545;
+      --red-bg: #fceeee;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.62 'DM Sans', system-ui, -apple-system, sans-serif;
+    }
+    a { color: var(--teal); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Top Header */
+    .guide-header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: var(--card);
+      border-bottom: 1px solid var(--line);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brandmark {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--teal);
+      line-height: 1;
+      position: relative;
+      letter-spacing: -1px;
+    }
+    .brandmark span {
+      color: #d4a75b;
+      font-size: 22px;
+      position: absolute;
+      right: -7px;
+      top: -4px;
+    }
+    .brand-text b {
+      display: block;
+      font-size: 16px;
+      color: var(--navy);
+      line-height: 1.2;
+    }
+    .brand-text small {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: 0.5px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 15px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      text-decoration: none !important;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-primary { background: var(--teal); color: #fff; border-color: var(--teal); }
+    .btn-primary:hover { background: var(--teal-dark); }
+    .btn-secondary { background: #fff; color: var(--ink); border-color: #c9d6d8; }
+    .btn-secondary:hover { background: var(--bg); }
+
+    /* Layout */
+    .layout {
+      max-width: 1320px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 270px minmax(0, 1fr);
+      gap: 24px;
+      padding: 24px;
+      align-items: start;
+    }
+
+    /* Sidebar TOC */
+    .toc-sidebar {
+      position: sticky;
+      top: 78px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+    }
+    .toc-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.4px;
+      color: var(--muted);
+      text-transform: uppercase;
+      margin: 0 0 10px;
+    }
+    .toc-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+    .toc-list li { margin: 2px 0; }
+    .toc-list a {
+      display: block;
+      padding: 6px 10px;
+      border-radius: 7px;
+      color: var(--ink);
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+    .toc-list a:hover {
+      background: var(--soft);
+      color: var(--teal);
+      text-decoration: none;
+    }
+    .toc-sub {
+      list-style: none;
+      padding-left: 14px;
+      margin: 2px 0 6px;
+    }
+    .toc-sub a {
+      font-size: 12px;
+      color: var(--muted);
+      padding: 4px 10px;
+    }
+
+    /* Main Content */
+    .main-col { min-width: 0; }
+
+    /* Hero + Controls */
+    .hero {
+      background: linear-gradient(135deg, var(--navy) 0%, #0d4a4c 100%);
+      color: #fff;
+      border-radius: var(--radius);
+      padding: 28px 30px;
+      margin-bottom: 20px;
+    }
+    .hero .eyebrow {
+      font-size: 11px;
+      letter-spacing: 1.8px;
+      font-weight: 700;
+      color: #9be0d4;
+      text-transform: uppercase;
+      margin: 0 0 6px;
+    }
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: 26px;
+      line-height: 1.25;
+      letter-spacing: -0.5px;
+    }
+    .hero p {
+      margin: 0;
+      color: #d9ece8;
+      font-size: 13.5px;
+      max-width: 720px;
+    }
+    .hero-meta {
+      margin-top: 14px;
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 11.5px;
+      color: #cce5e0;
+    }
+    .hero-meta span {
+      background: rgba(255,255,255,0.12);
+      padding: 4px 10px;
+      border-radius: 999px;
+    }
+
+    /* Search & Filter Bar */
+    .filter-bar {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .search-box {
+      flex: 1;
+      min-width: 240px;
+      position: relative;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 10px 14px 10px 36px;
+      border: 1px solid #c9d6d8;
+      border-radius: 8px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .search-box svg {
+      position: absolute;
+      left: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+    }
+    .role-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .role-pill {
+      padding: 7px 13px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .role-pill.active {
+      background: var(--teal);
+      color: #fff;
+      border-color: var(--teal);
+    }
+
+    /* Cards & Sections */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 24px 26px;
+      margin-bottom: 20px;
+    }
+    .section-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 12px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .section-num {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--teal);
+      background: var(--soft);
+      padding: 3px 9px;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      letter-spacing: 0.4px;
+    }
+    .card h2 {
+      margin: 0;
+      font-size: 19px;
+      color: var(--navy);
+      letter-spacing: -0.3px;
+    }
+    .card h3 {
+      margin: 18px 0 8px;
+      font-size: 15px;
+      color: var(--navy);
+    }
+    .card h4 {
+      margin: 14px 0 6px;
+      font-size: 13.5px;
+      color: var(--ink);
+    }
+    .card p { margin: 0 0 10px; }
+    .card ul, .card ol { margin: 0 0 12px; padding-left: 20px; }
+    .card li { margin-bottom: 5px; }
+
+    /* Role Badges */
+    .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+    }
+    .badge-all { background: var(--soft); color: var(--teal); }
+    .badge-admin { background: var(--purple-bg); color: var(--purple); }
+    .badge-teacher { background: var(--blue-bg); color: var(--blue); }
+    .badge-therapist { background: var(--amber-bg); color: var(--amber); }
+
+    /* Role Grid */
+    .role-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .role-box {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      background: #fafcfc;
+    }
+    .role-box h3 { margin: 8px 0 6px; font-size: 15px; }
+    .role-box ul { padding-left: 16px; font-size: 12.5px; margin: 8px 0 0; }
+
+    /* Tables */
+    .table-wrap { overflow-x: auto; margin: 12px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f4f7f8;
+      color: var(--navy);
+      font-weight: 700;
+      font-size: 12px;
+    }
+    .yes { color: var(--teal); font-weight: 700; }
+    .no { color: #9aa8ad; }
+
+    /* How-To Index Grid */
+    .index-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .index-group {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      background: #fcfdfd;
+    }
+    .index-group h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      color: var(--teal);
+      border-bottom: 1px dashed var(--line);
+      padding-bottom: 5px;
+    }
+    .index-group ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      font-size: 12.5px;
+    }
+    .index-group li {
+      margin: 5px 0;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .index-group li span.sec-ref {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* Callouts */
+    .callout {
+      border-left: 4px solid var(--teal);
+      background: var(--soft);
+      padding: 12px 15px;
+      border-radius: 0 10px 10px 0;
+      margin: 12px 0;
+      font-size: 13px;
+    }
+    .callout.warn {
+      border-left-color: var(--amber);
+      background: var(--amber-bg);
+      color: #6b4510;
+    }
+    .callout.danger {
+      border-left-color: var(--red);
+      background: var(--red-bg);
+      color: #7d2f2f;
+    }
+    .kbd {
+      display: inline-block;
+      background: #eef3f4;
+      border: 1px solid #cbd6d8;
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--navy);
+    }
+
+    .guide-footer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      padding: 16px 0 32px;
+    }
+    .empty-search {
+      display: none;
+      text-align: center;
+      padding: 30px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+    }
+    .hidden-by-filter { display: none !important; }
+
+    /* Responsive */
+    @media (max-width: 960px) {
+      .layout { grid-template-columns: 1fr; padding: 16px; }
+      .toc-sidebar { position: static; max-height: none; }
+      .role-grid, .index-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Print / PDF Styles */
+    @media print {
+      @page {
+        size: A4;
+        margin: 14mm 14mm 16mm 14mm;
+      }
+      body {
+        background: #fff;
+        font-size: 10.5pt;
+        line-height: 1.48;
+      }
+      .guide-header, .toc-sidebar, .filter-bar, .no-print {
+        display: none !important;
+      }
+      .layout {
+        display: block;
+        max-width: 100%;
+        padding: 0;
+      }
+      .hero {
+        background: #00203f !important;
+        color: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+        padding: 20px 24px;
+        margin-bottom: 14px;
+      }
+      .card {
+        border: 1px solid #d5dfe2;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        box-shadow: none;
+      }
+      .role-box, .index-group, .callout, tr, .section-header {
+        break-inside: avoid;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+      a { color: var(--navy); text-decoration: none; }
+      .badge, th, .callout, .section-num {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .hidden-by-filter { display: block !important; }
+    }
+  </style>
+</head>
+<body>
+  <header class="guide-header">
+    <div class="brand-row">
+      <div class="brandmark">b<span>•</span></div>
+      <div class="brand-text">
+        <b>Brainiac Hub — Panduan Pengguna</b>
+        <small>BERUNTUNG BRAINIAC • PUSAT PERKEMBANGAN KANAK-KANAK</small>
+      </div>
+    </div>
+    <div class="header-actions">
+      <a class="btn btn-secondary" href="/">← Kembali ke Aplikasi</a>
+      <button class="btn btn-secondary" type="button" onclick="window.print()">Cetak Halaman</button>
+      <a class="btn btn-primary" href="/Brainiac-Hub-User-Guide.pdf" download="Brainiac-Hub-User-Guide.pdf">Muat Turun PDF</a>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="toc-sidebar" aria-label="Isi Kandungan">
+      <p class="toc-title">Isi Kandungan</p>
+      <ul class="toc-list">
+        <li><a href="#indeks">Indeks &amp; Matriks Akses</a>
+          <ul class="toc-sub">
+            <li><a href="#indeks-peranan">Mengikut Peranan</a></li>
+            <li><a href="#matriks-akses">Matriks Akses Modul</a></li>
+            <li><a href="#indeks-tugasan">Indeks "Bagaimana Untuk..."</a></li>
+          </ul>
+        </li>
+        <li><a href="#sec-1">1. Permulaan &amp; Keselamatan</a></li>
+        <li><a href="#sec-2">2. Dashboard Harian</a></li>
+        <li><a href="#sec-3">3. Pelajar, Pakej &amp; Sejarah</a></li>
+        <li><a href="#sec-4">4. Jadual &amp; Kehadiran Pelajar</a></li>
+        <li><a href="#sec-5">5. Study Plans &amp; Nota Kelas (EIP)</a></li>
+        <li><a href="#sec-6">6. Assessment &amp; Therapy Session</a></li>
+        <li><a href="#sec-7">7. Progress Report (PDF)</a></li>
+        <li><a href="#sec-8">8. Portal Staf &amp; HR</a>
+          <ul class="toc-sub">
+            <li><a href="#sec-8-1">8.1 Kehadiran Staf (GPS)</a></li>
+            <li><a href="#sec-8-2">8.2 Cuti &amp; MC</a></li>
+            <li><a href="#sec-8-3">8.3 Tuntutan Perubatan</a></li>
+            <li><a href="#sec-8-4">8.4 Penggajian &amp; Slip Gaji</a></li>
+          </ul>
+        </li>
+        <li><a href="#sec-9">9. Pentadbiran Pusat (Admin)</a></li>
+      </ul>
+    </aside>
+
+    <main class="main-col">
+      <section class="hero">
+        <p class="eyebrow">BERUNTUNG BRAINIAC • MANUAL RASMI</p>
+        <h1>Panduan Pengguna Brainiac Hub</h1>
+        <p>Rujukan langkah demi langkah untuk <strong>Admin</strong>, <strong>Cikgu EIP</strong>, dan <strong>Terapis</strong>. Gunakan indeks atau kotak carian di bawah untuk mencari cara melaksanakan tugasan tertentu.</p>
+        <div class="hero-meta">
+          <span>No. SSM: 202503030392 (003694359-M)</span>
+          <span>Versi Sistem: Secure EHR + HR &amp; Pakej Sesi</span>
+          <span>Zon Masa: Waktu Malaysia (MYT)</span>
+        </div>
+      </section>
+
+      <div class="filter-bar">
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input id="guide-search" type="search" placeholder="Cari panduan… cth: GPS, MC, pakej, SOAP, slip gaji, sandaran" aria-label="Cari panduan">
+        </div>
+        <div class="role-pills" role="group" aria-label="Tapis mengikut peranan">
+          <button class="role-pill active" type="button" data-role-filter="all">Semua Peranan</button>
+          <button class="role-pill" type="button" data-role-filter="admin">Admin</button>
+          <button class="role-pill" type="button" data-role-filter="teacher">Cikgu</button>
+          <button class="role-pill" type="button" data-role-filter="therapist">Terapis</button>
+        </div>
+      </div>
+
+      <div id="empty-search" class="empty-search">
+        Tiada bahagian panduan yang sepadan dengan carian anda. Cuba kata kunci lain atau tekan <strong>Semua Peranan</strong>.
+      </div>
+
+      <!-- INDEKS -->
+      <section class="card guide-section" id="indeks" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">INDEKS UTAMA</span>
+            <h2>Indeks Mengikut Peranan &amp; Tugasan</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+
+        <h3 id="indeks-peranan">A. Indeks Mengikut Jenis Pengguna (Peranan)</h3>
+        <div class="role-grid">
+          <div class="role-box">
+            <span class="badge badge-admin">ADMIN (Pentadbir Pusat)</span>
+            <h3>Akses Penuh (15 Modul)</h3>
+            <p style="font-size:12px;color:var(--muted)">Mengurus operasi klinikal, akaun pengguna, HR, penggajian dan sandaran pangkalan data.</p>
+            <ul>
+              <li><a href="#sec-1">Log Masuk &amp; Keselamatan</a></li>
+              <li><a href="#sec-3">Profil Pelajar &amp; Pakej Sesi</a></li>
+              <li><a href="#sec-4">Jadual &amp; Kehadiran Pelajar</a></li>
+              <li><a href="#sec-5">Study Plans &amp; Nota Kelas</a></li>
+              <li><a href="#sec-6">Assessment &amp; Terapi SOAP</a></li>
+              <li><a href="#sec-7">Progress Report (PDF)</a></li>
+              <li><a href="#sec-8">HR: GPS, Cuti/MC, Tuntutan &amp; Gaji</a></li>
+              <li><a href="#sec-9">Direktori Staf, Akaun &amp; Sandaran</a></li>
+            </ul>
+          </div>
+          <div class="role-box">
+            <span class="badge badge-teacher">CIKGU (Guru EIP)</span>
+            <h3>12 Modul Kelas &amp; Portal Staf</h3>
+            <p style="font-size:12px;color:var(--muted)">Mengurus pengajaran kelas EIP, kehadiran murid, laporan perkembangan dan rekod HR peribadi.</p>
+            <ul>
+              <li><a href="#sec-1">Log Masuk &amp; Tukar Kata Laluan</a></li>
+              <li><a href="#sec-2">Dashboard &amp; Pintasan Nota</a></li>
+              <li><a href="#sec-3">Pelajar, Pakej &amp; Sejarah</a></li>
+              <li><a href="#sec-4">Jadual EIP &amp; Kehadiran Pelajar</a></li>
+              <li><a href="#sec-5">Study Plans &amp; Nota Kelas EIP</a></li>
+              <li><a href="#sec-7">Progress Report (PDF)</a></li>
+              <li><a href="#sec-8-1">Clock In / Out GPS (100m)</a></li>
+              <li><a href="#sec-8-2">Mohon Cuti, MC &amp; Tuntutan</a></li>
+              <li><a href="#sec-8-4">Muat Turun Slip Gaji PDF</a></li>
+            </ul>
+          </div>
+          <div class="role-box">
+            <span class="badge badge-therapist">TERAPIS (OT / Pertuturan)</span>
+            <h3>8 Modul Klinikal &amp; Terapi</h3>
+            <p style="font-size:12px;color:var(--muted)">Menjalankan penilaian klinikal, sesi terapi hujung minggu, nota SOAP dan laporan perkembangan.</p>
+            <ul>
+              <li><a href="#sec-1">Log Masuk &amp; Tukar Kata Laluan</a></li>
+              <li><a href="#sec-2">Dashboard Harian</a></li>
+              <li><a href="#sec-3">Pelajar, Pakej &amp; Sejarah</a></li>
+              <li><a href="#sec-4">Jadual Terapi (Sabtu–Ahad)</a></li>
+              <li><a href="#sec-4">Kehadiran Pelajar</a></li>
+              <li><a href="#sec-6">Assessment (SSP / Denver II / Pertuturan)</a></li>
+              <li><a href="#sec-6">Therapy Session &amp; Nota SOAP</a></li>
+              <li><a href="#sec-7">Progress Report (PDF)</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <h3 id="matriks-akses">B. Matriks Akses Modul Mengikut Peranan</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Modul / Fungsi</th>
+                <th>Admin</th>
+                <th>Cikgu (EIP)</th>
+                <th>Terapis</th>
+                <th>Rujukan</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Dashboard &amp; Ringkasan Sesi</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td><a href="#sec-2">Seksyen 2</a></td></tr>
+              <tr><td>Pelajar, Pakej Sesi &amp; Sejarah Pelajar</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td><a href="#sec-3">Seksyen 3</a></td></tr>
+              <tr><td>Jadual Sesi &amp; Kehadiran Pelajar</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td><a href="#sec-4">Seksyen 4</a></td></tr>
+              <tr><td>Study Plans &amp; Nota Kelas (EIP)</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td class="no">Tiada</td><td><a href="#sec-5">Seksyen 5</a></td></tr>
+              <tr><td>Assessment (SSP, Denver II, Pertuturan)</td><td class="yes">Penuh</td><td class="no">Tiada</td><td class="yes">Penuh</td><td><a href="#sec-6">Seksyen 6</a></td></tr>
+              <tr><td>Therapy Session (Nota Terapi &amp; SOAP)</td><td class="yes">Penuh</td><td class="no">Tiada</td><td class="yes">Penuh</td><td><a href="#sec-6">Seksyen 6</a></td></tr>
+              <tr><td>Progress Report (Jana PDF)</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td class="yes">Penuh</td><td><a href="#sec-7">Seksyen 7</a></td></tr>
+              <tr><td>Kehadiran Staf (GPS Clock In/Out)</td><td class="yes">Urus &amp; Edit</td><td class="yes">Kendiri</td><td class="no">Tiada</td><td><a href="#sec-8-1">Seksyen 8.1</a></td></tr>
+              <tr><td>Cuti &amp; MC</td><td class="yes">Lulus / Kuota</td><td class="yes">Mohon &amp; Semak</td><td class="no">Tiada</td><td><a href="#sec-8-2">Seksyen 8.2</a></td></tr>
+              <tr><td>Tuntutan Perubatan</td><td class="yes">Lulus / Had</td><td class="yes">Hantar &amp; Semak</td><td class="no">Tiada</td><td><a href="#sec-8-3">Seksyen 8.3</a></td></tr>
+              <tr><td>Penggajian &amp; Slip Gaji (27hb)</td><td class="yes">Proses &amp; Profil</td><td class="yes">Lihat &amp; PDF</td><td class="no">Tiada</td><td><a href="#sec-8-4">Seksyen 8.4</a></td></tr>
+              <tr><td>Direktori Staf, Akaun Pengguna &amp; Sandaran (.sql)</td><td class="yes">Penuh</td><td class="no">Tiada</td><td class="no">Tiada</td><td><a href="#sec-9">Seksyen 9</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="indeks-tugasan">C. Indeks Tugasan ("Bagaimana Untuk...")</h3>
+        <div class="index-grid">
+          <div class="index-group">
+            <h4>Akaun &amp; Asas Sistem</h4>
+            <ul>
+              <li><a href="#sec-1">Log masuk kali pertama &amp; tukar kata laluan</a><span class="sec-ref">Sek. 1</span></li>
+              <li><a href="#sec-1">Elak kehilangan data (amaran Buang perubahan)</a><span class="sec-ref">Sek. 1</span></li>
+              <li><a href="#sec-2">Guna widget Clock In/Out di header</a><span class="sec-ref">Sek. 2 / 8.1</span></li>
+            </ul>
+          </div>
+          <div class="index-group">
+            <h4>Pelajar, Pakej &amp; Jadual</h4>
+            <ul>
+              <li><a href="#sec-3">Daftar pelajar baharu &amp; maklumat penjaga</a><span class="sec-ref">Sek. 3</span></li>
+              <li><a href="#sec-3">Tambah pakej sesi bulanan atau one-off</a><span class="sec-ref">Sek. 3</span></li>
+              <li><a href="#sec-4">Atur jadual EIP (Isn–Jum) &amp; Terapi (Sab–Ahd)</a><span class="sec-ref">Sek. 4</span></li>
+              <li><a href="#sec-4">Tanda kehadiran Hadir &amp; tolak baki pakej</a><span class="sec-ref">Sek. 4</span></li>
+            </ul>
+          </div>
+          <div class="index-group">
+            <h4>Klinikal, EIP &amp; Laporan</h4>
+            <ul>
+              <li><a href="#sec-5">Sedia Study Plan &amp; isi Nota Kelas EIP</a><span class="sec-ref">Sek. 5</span></li>
+              <li><a href="#sec-6">Isi Assessment (SSP / Denver II / Pertuturan)</a><span class="sec-ref">Sek. 6</span></li>
+              <li><a href="#sec-6">Rekod nota terapi SOAP &amp; tambah sasaran</a><span class="sec-ref">Sek. 6</span></li>
+              <li><a href="#sec-7">Jana &amp; muat turun Progress Report PDF</a><span class="sec-ref">Sek. 7</span></li>
+            </ul>
+          </div>
+          <div class="index-group">
+            <h4>Portal Staf, HR &amp; Pentadbiran</h4>
+            <ul>
+              <li><a href="#sec-8-1">Clock In / Out dalam radius 100m GPS</a><span class="sec-ref">Sek. 8.1</span></li>
+              <li><a href="#sec-8-2">Mohon cuti tahunan atau muat naik sijil MC</a><span class="sec-ref">Sek. 8.2</span></li>
+              <li><a href="#sec-8-3">Hantar tuntutan bil rawatan klinik</a><span class="sec-ref">Sek. 8.3</span></li>
+              <li><a href="#sec-8-4">Urus gaji (27hb), Potongan Lain &amp; muat turun slip</a><span class="sec-ref">Sek. 8.4</span></li>
+              <li><a href="#sec-9">Cipta akaun login &amp; muat turun sandaran .sql</a><span class="sec-ref">Sek. 9</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- SEKSYEN 1 -->
+      <section class="card guide-section page-break" id="sec-1" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 1</span>
+            <h2>Permulaan, Log Masuk &amp; Keselamatan Akaun</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+        <h3>1.1 Log Masuk Kali Pertama</h3>
+        <ol>
+          <li>Buka pautan Brainiac Hub pada pelayar web anda.</li>
+          <li>Masukkan <strong>Emel</strong> dan <strong>Kata laluan sementara</strong> yang diberikan oleh Admin pusat, kemudian tekan <span class="kbd">Log masuk</span>.</li>
+          <li>Pada log masuk pertama, sistem akan mewajibkan anda menukar kata laluan ke kata laluan peribadi sekurang-kurangnya <strong>12 aksara</strong> (maksimum 72 aksara).</li>
+          <li>Jika anda terlupa kata laluan, hubungi Admin pusat untuk menetapkan kata laluan sementara yang baharu.</li>
+        </ol>
+        <h3>1.2 Kunci Sesi Automatik &amp; Tukar Kata Laluan</h3>
+        <ul>
+          <li><strong>Kunci Automatik 30 Minit:</strong> Demi keselamatan data pelajar, sesi akan dikunci secara automatik selepas 30 minit tanpa sebarang aktiviti. Log masuk semula untuk menyambung kerja.</li>
+          <li><strong>Tukar Kata Laluan Bila-bila Masa:</strong> Klik butang <span class="kbd">Tukar kata laluan</span> di bahagian bawah bar sisi kiri.</li>
+        </ul>
+        <h3>1.3 Navigasi &amp; Perlindungan Data Belum Disimpan</h3>
+        <ul>
+          <li>Semua perubahan disimpan terus ke pangkalan data pelayan (<em>server</em>). Dialog <em>"Sedang menyimpan…"</em> akan muncul semasa transaksi pelayan berjalan.</li>
+          <li>Jika anda menekan <span class="kbd">← Kembali</span> atau cuba menukar halaman semasa borang belum disimpan, dialog amaran <strong>"Buang perubahan?"</strong> akan muncul supaya anda tidak kehilangan data secara tidak sengaja.</li>
+        </ul>
+      </section>
+
+      <!-- SEKSYEN 2 -->
+      <section class="card guide-section" id="sec-2" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 2</span>
+            <h2>Dashboard &amp; Ringkasan Harian</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+        <p>Dashboard ialah paparan utama selepas log masuk yang meringkaskan operasi harian pusat:</p>
+        <ul>
+          <li><strong>Kad Kehadiran Staf (Admin &amp; Cikgu):</strong> Paparan pantas status Clock In / Out hari ini terus di atas Dashboard dan juga di bar atas (<em>header</em>).</li>
+          <li><strong>4 Kad Statistik:</strong> Memaparkan bilangan <em>Pelajar hari ini</em>, <em>Sesi hari ini</em> (selesai vs berbaki), <em>Lesson plan</em> tersedia, dan <em>Sesi ganti</em>.</li>
+          <li><strong>Jadual Sesi Hari Ini:</strong> Gunakan tab status (<span class="kbd">Semua</span>, <span class="kbd">Berlangsung</span>, <span class="kbd">Dijadualkan</span>, <span class="kbd">Selesai</span>), kotak carian nama pelajar, dan penapis program (<em>EIP</em>, <em>Terapi Pertuturan</em>, <em>Terapi Carakerja</em>).</li>
+          <li><strong>Pintasan Pantas:</strong> Admin &amp; Cikgu mempunyai butang <span class="kbd">Masukkan nota kelas</span> di penjuru atas kanan Dashboard.</li>
+          <li><strong>Panel "Perlukan Perhatian":</strong> Pautan pantas ke <em>Study plans</em> dan <em>Kehadiran Pelajar</em>.</li>
+        </ul>
+      </section>
+
+      <!-- SEKSYEN 3 -->
+      <section class="card guide-section" id="sec-3" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 3</span>
+            <h2>Pelajar, Pakej Sesi &amp; Sejarah Pelajar</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+        <h3>3.1 Mendaftar &amp; Mengemaskini Profil Pelajar</h3>
+        <ol>
+          <li>Buka menu <strong>Pelajar</strong> dan klik <span class="kbd">+ Tambah Pelajar</span>.</li>
+          <li>Isi <strong>Nama murid</strong> (wajib bertanda <code>*</code>). Medan lain seperti No. IC, No. Kad OKU, Tarikh Lahir, Jenis OKU, Maklumat Penjaga, Alamat, dan Pekerjaan Ibu/Ayah boleh dilengkapkan kemudian.</li>
+          <li>Klik <span class="kbd">Lihat profil</span> pada kad pelajar untuk menyemak umur semasa dan baki sesi, atau <span class="kbd">Edit</span> untuk mengemaskini maklumat.</li>
+        </ol>
+        <h3>3.2 Mengurus Pakej &amp; Kuota Sesi Pelajar</h3>
+        <p>Di dalam borang <strong>Tambah / Edit Pelajar</strong>, bahagian <em>Pakej &amp; Kuota Sesi</em> membolehkan anda menetapkan kuota sesi:</p>
+        <ul>
+          <li><strong>Pakej Bulanan (Monthly):</strong> Diperbaharui secara automatik setiap bulan sehingga dihentikan. Baki sesi yang tidak digunakan pada bulan sebelumnya akan dibawa ke hadapan (<em>carryover</em>) secara automatik.</li>
+          <li><strong>Pakej Sekali (One-off):</strong> Pakej terhad yang digunakan sehingga baki habis (cth: <em>Pakej 5 Sesi OT</em>).</li>
+          <li><strong>Cara Tambah Pakej:</strong> Pilih templat pakej atau masukkan nama pakej tersuai, pilih kitaran bil, klik <span class="kbd">+ Tambah Pakej ke Profil</span>, kemudian wajib tekan <span class="kbd">Simpan perubahan</span>.</li>
+          <li><strong>Penolakan Automatik:</strong> Setiap kali kehadiran pelajar ditanda <strong>Hadir</strong> (sama ada di Dashboard atau di modul Kehadiran Pelajar), baki pakej program yang sepadan akan ditolak secara automatik.</li>
+        </ul>
+      </section>
+
+      <!-- SEKSYEN 4 -->
+      <section class="card guide-section" id="sec-4" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 4</span>
+            <h2>Jadual Sesi &amp; Kehadiran Pelajar</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+        <h3>4.1 Kalendar Jadual Sesi (Rancang Mengikut Tarikh)</h3>
+        <p>Buka menu <strong>Jadual sesi</strong>. Setiap penempatan disimpan untuk tarikh yang dipilih sahaja (tiada ulangan automatik):</p>
+        <ul>
+          <li><strong>Program EIP (Isnin – Jumaat):</strong> Dibahagikan kepada slot pagi &amp; petang mengikut kumpulan setiap Cikgu. Seorang murid hanya boleh ditempatkan bersama seorang cikgu bagi setiap slot masa.</li>
+          <li><strong>Program Terapi (Sabtu – Ahad):</strong> Mempunyai 5 slot terapi sehari (60 minit setiap sesi dengan sela 15 minit; slot terakhir 14:00–15:00).</li>
+          <li>Gunakan kalendar bulanan atau anak panah tarikh untuk menukar hari, klik mana-mana slot kosong/berisi untuk memilih murid dan staf, kemudian simpan.</li>
+        </ul>
+        <h3>4.2 Menandakan Kehadiran Pelajar</h3>
+        <ol>
+          <li>Buka menu <strong>Kehadiran Pelajar</strong>.</li>
+          <li>Klik <span class="kbd">Hadir</span> apabila murid menghadiri sesi — status sesi menjadi <em>Selesai</em> dan baki pakej sesi murid ditolak 1 sesi.</li>
+          <li>Klik <span class="kbd">Tidak hadir</span> jika murid tidak hadir — baki pakej sesi dikekalkan dan sistem menandakan lencana <em>Perlu sesi ganti</em> sebagai rujukan.</li>
+        </ol>
+      </section>
+
+      <!-- SEKSYEN 5 -->
+      <section class="card guide-section" id="sec-5" data-roles="admin teacher">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 5</span>
+            <h2>Study Plans &amp; Nota Kelas (EIP)</h2>
+          </div>
+          <div class="badges"><span class="badge badge-admin">Admin</span><span class="badge badge-teacher">Cikgu</span></div>
+        </div>
+        <h3>5.1 Study Plans (Rancangan Pengajaran)</h3>
+        <ul>
+          <li>Buka menu <strong>Study plans</strong> untuk mencipta atau menyemak rancangan pengajaran kelas EIP.</li>
+          <li><em>Study plan</em> yang disimpan boleh terus digunakan oleh semua cikgu tanpa perlu menunggu kelulusan (<em>approval</em>).</li>
+        </ul>
+        <h3>5.2 Nota Kelas Harian</h3>
+        <ol>
+          <li>Buka menu <strong>Nota kelas</strong> (atau klik pintasan di Dashboard).</li>
+          <li>Anda boleh memulakan nota baharu daripada sesi sedia ada atau pra-muat (<em>preload</em>) objektif daripada <em>Study plan</em>.</li>
+          <li>Sistem menyimpan draf secara automatik semasa anda menaip. Klik <span class="kbd">Simpan draf</span> untuk mengesahkan nota, atau <span class="kbd">Buang perubahan</span> untuk memulihkan nota ke keadaan sebelum suntingan.</li>
+        </ol>
+      </section>
+
+      <!-- SEKSYEN 6 -->
+      <section class="card guide-section" id="sec-6" data-roles="admin therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 6</span>
+            <h2>Assessment &amp; Therapy Session (Klinikal)</h2>
+          </div>
+          <div class="badges"><span class="badge badge-admin">Admin</span><span class="badge badge-therapist">Terapis</span></div>
+        </div>
+        <h3>6.1 Borang Penilaian (Assessment)</h3>
+        <p>Buka menu <strong>Assessment</strong> dan klik <span class="kbd">+ Assessment baharu</span>. Pilih jenis penilaian:</p>
+        <ul>
+          <li><strong>Short Sensory Profile (SSP) — OT:</strong> Mengira skor domain sensori secara automatik dan memaparkan klasifikasi profil sensori.</li>
+          <li><strong>Saringan Denver II — OT:</strong> Rekod item saringan dan anggaran tahap perkembangan mengikut domain.</li>
+          <li><strong>Assessment Pertuturan &amp; Bahasa:</strong> Rekod kekuatan, matlamat, garis dasar (<em>baseline</em>) dan pelan susulan.</li>
+          <li>Setiap penilaian bertanda <strong>SULIT</strong> dan boleh dimuat turun sebagai fail PDF rasmi.</li>
+        </ul>
+        <h3>6.2 Therapy Session &amp; Nota SOAP</h3>
+        <ul>
+          <li>Buka menu <strong>Therapy session</strong> dan pilih sesi atau tarikh terapi.</li>
+          <li>Isi dokumentasi klinikal menggunakan format piawai <strong>SOAP</strong>: <em>Subjective</em> (S), <em>Objective</em> (O), <em>Assessment</em> (A), dan <em>Plan</em> (P).</li>
+          <li>Gunakan butang tambah sasaran untuk merekodkan sasaran intervensi khusus bagi murid tersebut.</li>
+        </ul>
+      </section>
+
+      <!-- SEKSYEN 7 -->
+      <section class="card guide-section" id="sec-7" data-roles="all admin teacher therapist">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 7</span>
+            <h2>Progress Report (Laporan Perkembangan PDF)</h2>
+          </div>
+          <div class="badges"><span class="badge badge-all">Semua Pengguna</span></div>
+        </div>
+        <ol>
+          <li>Buka menu <strong>Progress Report</strong> dan klik <span class="kbd">+ Progress report baharu</span>.</li>
+          <li>Pilih pelajar, tempoh laporan, serta isi pencapaian dan cadangan aktiviti di rumah.</li>
+          <li>Simpan laporan, kemudian klik butang muat turun PDF untuk menjana dokumen berjenama rasmi Beruntung Brainiac yang sedia dikongsi bersama ibu bapa.</li>
+        </ol>
+      </section>
+
+      <!-- SEKSYEN 8 -->
+      <section class="card guide-section page-break" id="sec-8" data-roles="admin teacher">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 8</span>
+            <h2>Portal Staf &amp; Pengurusan HR</h2>
+          </div>
+          <div class="badges"><span class="badge badge-admin">Admin</span><span class="badge badge-teacher">Cikgu</span></div>
+        </div>
+        <div class="callout">
+          <strong>Nota Peranan:</strong> Modul Portal Staf &amp; HR (Seksyen 8.1 – 8.4) tersedia untuk <strong>Admin</strong> dan <strong>Cikgu</strong>. Akaun Terapis tidak memaparkan modul ini.
+        </div>
+
+        <h3 id="sec-8-1">8.1 Kehadiran Staf (Geofencing GPS 100m)</h3>
+        <ul>
+          <li><strong>Clock In / Out:</strong> Klik butang Clock In di widget bar atas (<em>header</em>), kad Dashboard, atau menu <strong>Kehadiran Staf</strong>. Benarkan akses lokasi (GPS) pada telefon/pelayar anda.</li>
+          <li><strong>Had Radius 100 Meter:</strong> Staf wajib berada dalam lingkungan <strong>100m</strong> daripada koordinat GPS rasmi Beruntung Brainiac (Bukit Beruntung) semasa Clock In.</li>
+          <li><strong>Kuasa Admin:</strong> Admin boleh menyemak senarai kehadiran semua staf, menambah/mengedit rekod secara manual jika berlaku isu teknikal, memadam rekod, mengemaskini koordinat premis melalui <span class="kbd">Tetapan HR &amp; GPS</span>, dan mengeksport laporan kehadiran.</li>
+        </ul>
+
+        <h3 id="sec-8-2">8.2 Cuti &amp; Sijil Sakit (MC)</h3>
+        <ul>
+          <li><strong>Permohonan Staf:</strong> Buka menu <strong>Cuti &amp; MC</strong>, klik <span class="kbd">Mohon Cuti Baharu</span>, pilih jenis cuti (Cuti Tahunan, Cuti Sakit / MC, Hospitalisasi, dll.), tarikh, dan sebab.</li>
+          <li><strong>Muat Naik Sijil MC:</strong> Untuk permohonan MC atau Hospitalisasi, muat naik gambar atau fail PDF sijil sakit sebagai bukti sokongan.</li>
+          <li><strong>Aliran Kelulusan:</strong> Semua permohonan cuti (termasuk MC) berstatus <em>Menunggu Kelulusan</em> sehingga diluluskan oleh Admin. Baki kuota hanya ditolak selepas diluluskan.</li>
+          <li><strong>Bawa Ke Hadapan (Carry Forward) &amp; Kuota:</strong> Baki cuti tahunan yang tidak digunakan dibawa ke tahun hadapan sehingga had maksimum yang ditetapkan. Admin boleh melaras kuota setiap staf dan mengeksport laporan Cuti &amp; MC (CSV, Excel, PDF).</li>
+        </ul>
+
+        <h3 id="sec-8-3">8.3 Tuntutan Perubatan</h3>
+        <ul>
+          <li><strong>Hantar Tuntutan:</strong> Buka menu <strong>Tuntutan Perubatan</strong>, masukkan tarikh rawatan, nama klinik, jumlah (RM), dan muat naik resit klinik.</li>
+          <li><strong>Bayaran Balik Automatik ke Slip Gaji:</strong> Tuntutan yang diluluskan oleh Admin akan ditolak daripada had elaun tahunan staf dan dimasukkan secara automatik ke dalam Slip Gaji bulanan (27hb) sebagai bayaran balik (<em>reimbursement</em>).</li>
+        </ul>
+
+        <h3 id="sec-8-4">8.4 Penggajian &amp; Slip Gaji (27hb)</h3>
+        <ul>
+          <li><strong>Hari Gaji:</strong> Gaji bulanan diproses pada setiap <strong>27hb</strong> (boleh diubah dalam Tetapan HR).</li>
+          <li><strong>Kiraan Berkanun 2026 Automatik:</strong> Sistem mengira caruman <strong>KWSP (Borang A)</strong>, <strong>PERKESO (termasuk SKBBK / LINDUNG 24 Jam)</strong>, dan <strong>SIP / EIS</strong> secara automatik mengikut jadual rasmi 2026. <em>Travelling Allowance</em> dikecualikan daripada asas kiraan KWSP/PERKESO/SIP selaras garis panduan e-Payroll KWSP.</li>
+          <li><strong>Potongan Lain-lain:</strong> Admin boleh menambah potongan bukan berkanun (cth: pinjaman/pendahuluan/yuran) pada profil gaji staf.</li>
+          <li><strong>Muat Turun Slip Gaji PDF:</strong> Cikgu dan Admin boleh klik butang <span class="kbd">Muat Turun PDF</span> terus pada senarai slip gaji untuk mendapatkan slip gaji rasmi bulanan.</li>
+        </ul>
+      </section>
+
+      <!-- SEKSYEN 9 -->
+      <section class="card guide-section" id="sec-9" data-roles="admin">
+        <div class="section-header">
+          <div>
+            <span class="section-num">SEKSYEN 9</span>
+            <h2>Pentadbiran Pusat &amp; Sandaran Data</h2>
+          </div>
+          <div class="badges"><span class="badge badge-admin">Admin Sahaja</span></div>
+        </div>
+        <h3>9.1 Direktori Staf vs Akaun Pengguna</h3>
+        <div class="callout warn">
+          <strong>Penting:</strong> <em>Direktori Staf</em> dan <em>Akaun Pengguna</em> diurus secara berasingan. Menambah staf ke direktori tidak mencipta kata laluan log masuk secara automatik.
+        </div>
+        <ul>
+          <li><strong>Direktori Staf (Menu Pentadbiran):</strong> Digunakan untuk menyenaraikan staf dalam pilihan jadual sesi. Jawatan yang tersedia: <em>Special Needs Teacher</em> (EIP), <em>Occupational Therapist</em>, <em>Speech Therapist</em>, dan <em>Admin</em>.</li>
+          <li><strong>Akaun Pengguna (Bar Sisi Kiri):</strong> Klik <span class="kbd">Akaun pengguna</span> untuk mencipta akaun log masuk baharu (tetapkan nama, emel login, peranan <em>Admin / Cikgu / Terapis</em>, kata laluan sementara min 12 aksara, dan status <em>Akaun aktif</em>).</li>
+        </ul>
+        <h3>9.2 Laporan &amp; Sandaran Penuh Pangkalan Data</h3>
+        <ul>
+          <li>Buka menu <strong>Laporan</strong> atau klik butang <span class="kbd">Sandaran penuh</span> di bar sisi kiri.</li>
+          <li><strong>Sandaran Pemulihan Penuh (.sql):</strong> Muat turun kesemua 14 jadual pangkalan data MySQL (rekod klinikal EHR, akaun, kehadiran GPS, cuti &amp; MC, tuntutan, penggajian dan log audit). Boleh diimport terus ke <em>phpMyAdmin → Import</em> jika berlaku kerosakan data.</li>
+          <li><strong>Arkib Data (.json):</strong> Salinan berstruktur untuk arkib dalaman (kata laluan log masuk disunting keluar).</li>
+          <li><strong>Eksport CSV Sesi:</strong> Muat turun ringkasan sesi harian semasa dalam format CSV.</li>
+        </ul>
+        <div class="callout danger">
+          <strong>Keselamatan Fail Sandaran:</strong> Simpan fail <code>.sql</code> dan <code>.json</code> di storan peribadi atau Google Drive sulit. Jangan muat naik fail sandaran ke folder awam pelayan web.
+        </div>
+      </section>
+
+      <footer class="guide-footer">
+        BERUNTUNG BRAINIAC • No. SSM: 202503030392 (003694359-M) • Panduan Pengguna Rasmi Brainiac Hub
+      </footer>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const searchInput = document.getElementById('guide-search');
+      const rolePills = document.querySelectorAll('.role-pill');
+      const sections = document.querySelectorAll('.guide-section');
+      const emptyBox = document.getElementById('empty-search');
+      let activeRole = 'all';
+
+      function applyFilter() {
+        const q = (searchInput.value || '').trim().toLowerCase();
+        let visibleCount = 0;
+
+        sections.forEach(sec => {
+          const roles = (sec.dataset.roles || 'all').split(/\s+/);
+          const roleMatch = activeRole === 'all' || roles.includes(activeRole);
+          const textMatch = !q || sec.textContent.toLowerCase().includes(q);
+          const show = roleMatch && textMatch;
+          sec.classList.toggle('hidden-by-filter', !show);
+          if (show) visibleCount++;
+        });
+
+        emptyBox.style.display = visibleCount === 0 ? 'block' : 'none';
+      }
+
+      searchInput.addEventListener('input', applyFilter);
+
+      rolePills.forEach(pill => {
+        pill.addEventListener('click', () => {
+          rolePills.forEach(p => p.classList.remove('active'));
+          pill.classList.add('active');
+          activeRole = pill.dataset.roleFilter;
+          applyFilter();
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
