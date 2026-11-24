@@ -61,7 +61,7 @@
 .export-btn.pdf:hover{background:#fae5e5}
 
 /* Table Enhancements */
-.att-table-wrap{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.att-table-wrap{border:1px solid var(--line);border-radius:12px;background:var(--card);overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
 .att-table{margin:0}
 .att-table th{background:#f8fafb;font-weight:600;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .att-table td{padding:14px;font-size:12px;vertical-align:middle}

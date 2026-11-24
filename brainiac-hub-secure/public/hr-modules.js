@@ -1138,11 +1138,50 @@ function renderMyPayslipsSection(){
         <td style="color:var(--red)">-${formatRM(s.total_deductions)}</td>
         <td><b style="font-size:14px;color:var(--teal)">${formatRM(s.net_salary)}</b></td>
         <td>
-          <button class="primary mini-btn" type="button" data-view-payslip="${esc(s.id)}" style="background:#0d6955">
-            ${icon('clipboard')} Papar / PDF Slip
-          </button>
+          <div class="payslip-action-group">
+            <button class="secondary mini-btn" type="button" data-view-payslip="${esc(s.id)}">
+              ${icon('clipboard')} Papar Slip
+            </button>
+            <button class="primary mini-btn" type="button" data-pdf-payslip="${esc(s.id)}" style="background:#0d6955">
+              ${icon('book')} Muat Turun PDF
+            </button>
+          </div>
         </td>
       </tr>
+    `;
+  }).join('');
+
+  const cards=myPayslipsData.map(s=>{
+    const fixAllow=Number(s.fixed_allowance||0);
+    const travAllow=Number(s.travelling_allowance||0);
+    const totAllow=fixAllow+travAllow;
+    return `
+      <div class="payslip-mobile-card">
+        <div class="payslip-mobile-head">
+          <div>
+            <b style="font-size:15px">${formatMyMonthYear(s.year_month)}</b>
+            <small style="display:block;color:var(--muted);margin-top:2px">Tarikh Bayaran: ${formatMyDate(s.pay_date)}</small>
+          </div>
+          <div style="text-align:right">
+            <small style="display:block;font-size:10px;color:var(--muted)">Gaji Bersih (Net)</small>
+            <b style="font-size:16px;color:var(--teal)">${formatRM(s.net_salary)}</b>
+          </div>
+        </div>
+        <div class="payslip-mobile-grid">
+          <div><small>Gaji Asas</small><b>${formatRM(s.basic_salary)}</b></div>
+          <div><small>Elaun${travAllow>0?' (incl. Perjalanan)':''}</small><b>${formatRM(totAllow)}</b></div>
+          <div><small>Tuntutan Perubatan</small><b style="color:var(--teal)">${formatRM(s.medical_claims)}</b></div>
+          <div><small>Jumlah Potongan</small><b style="color:var(--red)">-${formatRM(s.total_deductions)}</b></div>
+        </div>
+        <div class="payslip-mobile-actions">
+          <button class="secondary mini-btn" type="button" data-view-payslip="${esc(s.id)}">
+            ${icon('clipboard')} Papar Slip
+          </button>
+          <button class="primary mini-btn" type="button" data-pdf-payslip="${esc(s.id)}" style="background:#0d6955">
+            ${icon('book')} Muat Turun PDF
+          </button>
+        </div>
+      </div>
     `;
   }).join('');
 
@@ -1154,7 +1193,7 @@ function renderMyPayslipsSection(){
           <p>Paparan peribadi slip gaji bulanan anda di Beruntung Brainiac berserta caruman statutori KWSP, PERKESO, SIP dan elaun rawatan.</p>
         </div>
       </div>
-      <div class="att-table-wrap">
+      <div class="att-table-wrap my-payslips-table-wrap">
         <table class="att-table">
           <thead>
             <tr>
@@ -1173,6 +1212,9 @@ function renderMyPayslipsSection(){
             ${rows||'<tr><td colspan="9" class="empty">Tiada rekod slip gaji dijana lagi untuk akaun anda.</td></tr>'}
           </tbody>
         </table>
+      </div>
+      <div class="my-payslips-cards">
+        ${cards||'<div class="empty">Tiada rekod slip gaji dijana lagi untuk akaun anda.</div>'}
       </div>
     </section>
   `;
@@ -1204,9 +1246,14 @@ function renderAdminPayrollRunsSection(){
       <td style="color:var(--red)">-${formatRM(s.total_deductions)}</td>
       <td><b style="color:var(--teal)">${formatRM(s.net_salary)}</b></td>
       <td>
-        <button class="primary mini-btn" type="button" data-view-payslip="${esc(s.id)}" style="background:#0d6955">
-          ${icon('clipboard')} Semak Slip
-        </button>
+        <div class="payslip-action-group">
+          <button class="secondary mini-btn" type="button" data-view-payslip="${esc(s.id)}">
+            ${icon('clipboard')} Semak Slip
+          </button>
+          <button class="primary mini-btn" type="button" data-pdf-payslip="${esc(s.id)}" style="background:#0d6955">
+            ${icon('book')} PDF
+          </button>
+        </div>
       </td>
     </tr>
   `;}).join('');
@@ -2103,6 +2150,17 @@ document.addEventListener('click',async e=>{
   }
   if(b.dataset.viewPayslip){
     openPayslipModal(b.dataset.viewPayslip);
+  }
+  if(b.dataset.pdfPayslip){
+    const slip=findPayslipById(b.dataset.pdfPayslip);
+    if(slip){
+      b.disabled=true;
+      try{
+        await downloadPayslipPdf(slip);
+      }finally{
+        b.disabled=false;
+      }
+    }
   }
 });
 
