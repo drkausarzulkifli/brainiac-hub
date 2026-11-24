@@ -28,12 +28,38 @@ function formatMyMonthYear(ym){
   return `${mName} ${parts[0]}`;
 }
 
+let _activeLightboxBlobUrl=null;
+
+function isPdfAttachment(src,fileName=''){
+  return /^data:application\/pdf/i.test(String(src||''))||/\.pdf$/i.test(String(fileName||'').trim());
+}
+
+function validateAttachmentFile(file){
+  if(!file)return '';
+  const mime=(file.type||'').toLowerCase();
+  const name=(file.name||'').toLowerCase();
+  const isPdf=mime==='application/pdf'||/\.pdf$/.test(name);
+  const isImg=mime.startsWith('image/')||/\.(jpe?g|png|webp|gif|heic|heif)$/.test(name);
+  if(!isPdf&&!isImg)throw new Error('Format fail tidak disokong. Sila pilih foto (JPG/PNG) atau dokumen PDF sahaja.');
+  if(isPdf&&file.size>6*1024*1024)throw new Error('Saiz dokumen PDF terlalu besar (maksimum 6 MB).');
+  if(isImg&&file.size>15*1024*1024)throw new Error('Saiz foto terlalu besar (maksimum 15 MB).');
+  return isPdf?'pdf':'image';
+}
+
 function fileToBase64(file){
   return new Promise((resolve,reject)=>{
     const reader=new FileReader();
     reader.onerror=err=>reject(err);
     reader.onload=()=>{
-      const raw=reader.result;
+      let raw=String(reader.result||'');
+      const isPdf=file.type==='application/pdf'||/\.pdf$/i.test(file.name||'');
+      if(isPdf){
+        if(/^data:application\/octet-stream;base64,/i.test(raw)){
+          raw=raw.replace(/^data:application\/octet-stream;base64,/i,'data:application/pdf;base64,');
+        }
+        resolve(raw);
+        return;
+      }
       if(!file.type||!file.type.startsWith('image/')){resolve(raw);return}
       const img=new Image();
       img.onerror=()=>resolve(raw);
@@ -60,12 +86,63 @@ function fileToBase64(file){
   });
 }
 
-function showImageLightbox(title,src){
+function dataUriToBlobUrl(dataUrl){
+  try{
+    if(typeof URL==='undefined'||typeof URL.createObjectURL!=='function'||typeof atob!=='function')return dataUrl;
+    const m=String(dataUrl||'').match(/^data:([^;]+);base64,(.+)$/s);
+    if(!m)return dataUrl;
+    const mime=m[1];
+    const bin=atob(m[2]);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);
+    if(_activeLightboxBlobUrl){
+      try{URL.revokeObjectURL(_activeLightboxBlobUrl)}catch{}
+    }
+    _activeLightboxBlobUrl=URL.createObjectURL(new Blob([bytes],{type:mime}));
+    return _activeLightboxBlobUrl;
+  }catch{
+    return dataUrl;
+  }
+}
+
+function buildSafeDownloadName(title,src,fileName=''){
+  const cleanName=String(fileName||'').trim();
+  const baseSource=cleanName?cleanName.replace(/\.[^.]+$/,''):String(title||'dokumen');
+  const safeBase=baseSource.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')||'dokumen';
+  if(isPdfAttachment(src,cleanName))return `${safeBase}.pdf`;
+  const m=String(src||'').match(/^data:image\/([a-z0-9.+-]+);/i);
+  const ext=m?({jpeg:'jpg',png:'png',webp:'webp',gif:'gif'}[m[1].toLowerCase()]||'jpg'):'jpg';
+  return `${safeBase}.${ext}`;
+}
+
+function showImageLightbox(title,src,fileName=''){
+  const isPdf=isPdfAttachment(src,fileName);
+  const dlName=buildSafeDownloadName(title,src,fileName);
+  if(isPdf){
+    const viewUrl=dataUriToBlobUrl(src);
+    open(title,`
+      <div style="text-align:center;padding:8px 0">
+        ${fileName?`<p style="font-size:12px;color:var(--muted);margin:0 0 10px">Fail PDF: <b>${esc(fileName)}</b></p>`:''}
+        <object data="${esc(viewUrl)}" type="application/pdf" style="width:100%;height:65vh;border:1px solid var(--line);border-radius:8px;background:#fff">
+          <iframe src="${esc(viewUrl)}" title="${esc(title)}" style="width:100%;height:65vh;border:none;border-radius:8px"></iframe>
+        </object>
+        <div style="margin-top:14px;display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <a href="${esc(viewUrl)}" target="_blank" rel="noopener" class="secondary button" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:8px 16px">
+            ${icon('clipboard')} Buka PDF di Tab Baharu
+          </a>
+          <a href="${esc(viewUrl)}" download="${esc(dlName)}" class="primary button" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:8px 18px">
+            ${icon('clipboard')} Muat Turun PDF
+          </a>
+        </div>
+      </div>
+    `);
+    return;
+  }
   open(title,`
     <div style="text-align:center;padding:10px 0">
       <img src="${esc(src)}" alt="${esc(title)}" style="max-width:100%;max-height:75vh;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.15)">
       <div style="margin-top:14px">
-        <a href="${esc(src)}" download="${esc(title.toLowerCase().replace(/[^a-z0-9]/g,'_'))}.jpg" class="primary button" style="display:inline-block;text-decoration:none;padding:8px 18px">
+        <a href="${esc(src)}" download="${esc(dlName)}" class="primary button" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none;padding:8px 18px">
           ${icon('clipboard')} Muat Turun Dokumen
         </a>
       </div>
@@ -248,7 +325,8 @@ function renderMyLeavesSection(){
   const rows=myLeaveData.leaves.map((l,i)=>{
     const stBadge=l.status==='Approved'?'<span class="status-chip approved">✓ Diluluskan</span>':l.status==='Rejected'?'<span class="status-chip rejected">✕ Ditolak</span>':'<span class="status-chip pending">Menunggu Semakan</span>';
     const typeLabel={annual:'Cuti Tahunan',medical:'Cuti Sakit (MC)',hospitalisation:'Hospitalisasi',maternity:'Cuti Bersalin'}[l.leave_type]||l.leave_type;
-    const attachBtn=l.attachment_url?`<button class="secondary mini-btn" type="button" data-view-mc="${esc(l.id)}">${icon('clipboard')} Lihat MC</button>`:'-';
+    const attachLbl=l.leave_type==='medical'?'Lihat MC':(l.leave_type==='hospitalisation'?'Lihat Surat Wad':'Lihat Dokumen');
+    const attachBtn=l.attachment_url?`<button class="secondary mini-btn" type="button" data-view-mc="${esc(l.id)}">${icon('clipboard')} ${attachLbl}</button>`:'-';
     return `
       <tr>
         <td>${i+1}</td>
@@ -279,7 +357,7 @@ function renderMyLeavesSection(){
       <div class="hr-stat-card">
         <div class="hr-stat-label">Hospitalisasi ${icon('building')}</div>
         <div class="hr-stat-num">${hospRem} <small style="font-size:14px;color:var(--muted)">/ ${b.hospitalisation_total} hari</small></div>
-        <div class="hr-stat-sub">Kemasukan wad hospital</div>
+        <div class="hr-stat-sub">Wajib surat wad / MC hospital</div>
       </div>
       <div class="hr-stat-card">
         <div class="hr-stat-label">Cuti Bersalin ${icon('users')}</div>
@@ -310,7 +388,7 @@ function renderMyLeavesSection(){
               <th>Tempoh Cuti</th>
               <th>Bil. Hari</th>
               <th>Sebab Cuti</th>
-              <th>Sijil MC</th>
+              <th>Dokumen / MC</th>
               <th>Status</th>
               <th>Catatan Admin</th>
             </tr>
@@ -329,7 +407,8 @@ function renderAdminLeavesSection(){
   const rows=adminLeaveData.leaves.map((l,i)=>{
     const stBadge=l.status==='Approved'?'<span class="status-chip approved">✓ Diluluskan</span>':l.status==='Rejected'?'<span class="status-chip rejected">✕ Ditolak</span>':'<span class="status-chip pending">Menunggu Semakan</span>';
     const typeLabel={annual:'Cuti Tahunan',medical:'Cuti Sakit (MC)',hospitalisation:'Hospitalisasi',maternity:'Cuti Bersalin'}[l.leave_type]||l.leave_type;
-    const attachBtn=l.attachment_url?`<button class="secondary mini-btn" type="button" data-view-mc="${esc(l.id)}">${icon('clipboard')} Lihat MC</button>`:'-';
+    const attachLbl=l.leave_type==='medical'?'Lihat MC':(l.leave_type==='hospitalisation'?'Lihat Surat Wad':'Lihat Dokumen');
+    const attachBtn=l.attachment_url?`<button class="secondary mini-btn" type="button" data-view-mc="${esc(l.id)}">${icon('clipboard')} ${attachLbl}</button>`:'-';
     
     let actions='-';
     if(l.status==='Pending'){
@@ -382,7 +461,7 @@ function renderAdminLeavesSection(){
               <th>Tempoh Cuti</th>
               <th>Bil. Hari</th>
               <th>Sebab Permohonan</th>
-              <th>Sijil MC</th>
+              <th>Dokumen / MC</th>
               <th>Status</th>
               <th>Tindakan Pentadbir</th>
             </tr>
@@ -509,8 +588,8 @@ function openApplyLeaveDialog(){
       <label class="field">Jenis Cuti
         <select name="leave_type" id="apply-leave-type" required>
           <option value="annual">Cuti Tahunan (Annual Leave)</option>
-          <option value="medical">Cuti Sakit / MC (Medical Leave - Wajib Foto MC)</option>
-          <option value="hospitalisation">Cuti Hospitalisasi (Hospitalisation Leave)</option>
+          <option value="medical">Cuti Sakit / MC (Wajib Lampiran MC)</option>
+          <option value="hospitalisation">Cuti Hospitalisasi (Wajib Surat Hospital / MC)</option>
           <option value="maternity">Cuti Bersalin (Maternity Leave)</option>
         </select>
       </label>
@@ -529,20 +608,26 @@ function openApplyLeaveDialog(){
         <textarea name="reason" rows="2" maxlength="300" required placeholder="Nyatakan sebab bercuti atau urusan..."></textarea>
       </label>
 
-      <!-- MC Photo Upload Box (visible when medical leave) -->
-      <div id="mc-upload-container" style="display:none;margin-top:10px;padding:14px;border:1px dashed var(--teal);border-radius:8px;background:var(--soft)">
+      <!-- Leave Attachment Box (always visible; mandatory for medical & hospitalisation) -->
+      <div id="mc-upload-container" style="display:block;margin-top:10px;padding:14px;border:1px dashed var(--teal);border-radius:8px;background:var(--soft)">
         <label class="field" style="margin:0">
-          <strong style="color:var(--teal)">${icon('heart')} Muat Naik Foto Sijil Cuti Sakit (MC) <span style="color:var(--red)">*</span></strong>
-          <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Ambil gambar sijil MC menggunakan kamera telefon atau pilih foto dari galeri peranti anda.</p>
-          <input type="file" id="mc-file-input" accept="image/*" capture="environment">
+          <strong id="mc-upload-title" style="color:var(--teal)">${icon('clipboard')} Muat Naik Foto / Dokumen Sokongan <small style="color:var(--muted);font-weight:400">(Pilihan)</small></strong>
+          <p id="mc-upload-hint" style="font-size:11px;color:var(--muted);margin:4px 0 8px">Boleh muat naik foto (JPG/PNG) atau dokumen PDF (maks 6 MB).</p>
+          <input type="file" id="mc-file-input" accept="image/*,application/pdf,.pdf">
         </label>
         <div id="mc-preview-box" class="attachment-preview-box" style="display:none">
-          <img id="mc-preview-img" class="attachment-thumb" src="" alt="Pratonton MC">
-          <div class="attachment-info">
-            <b id="mc-file-name">mc_dokumen.jpg</b>
-            <span style="display:block;color:var(--teal);margin-top:2px">✓ Foto MC dimampatkan & sedia dimuat naik</span>
+          <img id="mc-preview-img" class="attachment-thumb" src="" alt="Pratonton Dokumen" style="display:none">
+          <div id="mc-preview-pdf-badge" class="attachment-thumb" style="display:none;align-items:center;justify-content:center;background:#fdeeee;color:#a64545;font-weight:800;font-size:12px">PDF</div>
+          <div class="attachment-info" style="flex:1">
+            <b id="mc-file-name">dokumen</b>
+            <span id="mc-file-status" style="display:block;color:var(--teal);margin-top:2px">✓ Dokumen sedia dimuat naik</span>
           </div>
+          <button type="button" id="mc-clear-file" class="secondary mini-btn" style="color:var(--red)">Buang</button>
         </div>
+      </div>
+
+      <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:#fff8eb;border:1px solid #f0d7a7;font-size:11.5px;color:#7a5111">
+        <strong>Kelulusan Pentadbir Diperlukan:</strong> Semua permohonan cuti (termasuk Cuti Sakit / MC &amp; Hospitalisasi) akan berstatus <b>Menunggu Kelulusan</b> sehingga diluluskan oleh Pentadbir (Admin) sebelum baki cuti ditolak.
       </div>
 
       <p id="apply-leave-error" role="alert" style="color:var(--red);font-size:12px;margin:10px 0 0"></p>
@@ -554,14 +639,38 @@ function openApplyLeaveDialog(){
   `);
 
   const typeSel=document.querySelector('#apply-leave-type');
-  const mcBox=document.querySelector('#mc-upload-container');
+  const titleEl=document.querySelector('#mc-upload-title');
+  const hintEl=document.querySelector('#mc-upload-hint');
+  const fileIn=document.querySelector('#mc-file-input');
+  const prevBox=document.querySelector('#mc-preview-box');
+  const prevImg=document.querySelector('#mc-preview-img');
+  const prevPdf=document.querySelector('#mc-preview-pdf-badge');
+  const fileNameEl=document.querySelector('#mc-file-name');
+  const fileStatEl=document.querySelector('#mc-file-status');
+  const clearBtn=document.querySelector('#mc-clear-file');
+  const errEl=document.querySelector('#apply-leave-error');
   const startIn=document.querySelector('#apply-leave-start');
   const endIn=document.querySelector('#apply-leave-end');
   const daysIn=document.querySelector('#apply-leave-days');
 
-  typeSel.addEventListener('change',()=>{
-    mcBox.style.display=typeSel.value==='medical'?'block':'none';
-  });
+  function updateLeaveAttachmentUI(leaveType){
+    const reqMed=leaveType==='medical';
+    const reqHosp=leaveType==='hospitalisation';
+    fileIn.required=reqMed||reqHosp;
+    if(reqMed){
+      titleEl.innerHTML=`${icon('heart')} Muat Naik Foto / PDF Sijil Cuti Sakit (MC) <span style="color:var(--red)">*</span>`;
+      hintEl.textContent='Wajib untuk Cuti Sakit (MC). Ambil gambar MC atau muat naik foto (JPG/PNG) / dokumen PDF (maks 6 MB).';
+    }else if(reqHosp){
+      titleEl.innerHTML=`${icon('building')} Muat Naik Foto / PDF Surat Hospital / MC <span style="color:var(--red)">*</span>`;
+      hintEl.textContent='Wajib untuk Cuti Hospitalisasi. Muat naik surat kemasukan wad, discharge summary atau MC hospital dalam format foto atau PDF (maks 6 MB).';
+    }else{
+      titleEl.innerHTML=`${icon('clipboard')} Muat Naik Foto / Dokumen Sokongan <small style="color:var(--muted);font-weight:400">(Pilihan)</small>`;
+      hintEl.textContent='Pilihan untuk Cuti Tahunan / Bersalin — boleh muat naik foto atau fail PDF sokongan jika berkaitan (maks 6 MB).';
+    }
+  }
+
+  updateLeaveAttachmentUI(typeSel.value);
+  typeSel.addEventListener('change',()=>updateLeaveAttachmentUI(typeSel.value));
 
   function autoCalcDays(){
     if(startIn.value && endIn.value){
@@ -579,14 +688,44 @@ function openApplyLeaveDialog(){
   });
   endIn.addEventListener('change',autoCalcDays);
 
-  const fileIn=document.querySelector('#mc-file-input');
+  function resetAttachmentPreview(){
+    fileIn.value='';
+    prevImg.src='';
+    prevImg.style.display='none';
+    prevPdf.style.display='none';
+    prevBox.style.display='none';
+  }
+
+  clearBtn.addEventListener('click',()=>{
+    if(errEl)errEl.textContent='';
+    resetAttachmentPreview();
+  });
+
   fileIn.addEventListener('change',async e=>{
+    if(errEl)errEl.textContent='';
     const file=e.target.files?.[0];
-    if(!file)return;
-    const base64=await fileToBase64(file);
-    document.querySelector('#mc-preview-img').src=base64;
-    document.querySelector('#mc-file-name').textContent=file.name;
-    document.querySelector('#mc-preview-box').style.display='flex';
+    if(!file){resetAttachmentPreview();return;}
+    try{
+      const kind=validateAttachmentFile(file);
+      const base64=await fileToBase64(file);
+      if(base64.length>9500000)throw new Error('Saiz fail selepas diproses terlalu besar. Sila pilih fail bawah 6 MB.');
+      if(kind==='pdf'){
+        prevImg.src='';
+        prevImg.style.display='none';
+        prevPdf.style.display='flex';
+        fileStatEl.textContent='✓ Dokumen PDF sedia dimuat naik';
+      }else{
+        prevPdf.style.display='none';
+        prevImg.src=base64;
+        prevImg.style.display='block';
+        fileStatEl.textContent='✓ Foto dimampatkan & sedia dimuat naik';
+      }
+      fileNameEl.textContent=file.name;
+      prevBox.style.display='flex';
+    }catch(err){
+      resetAttachmentPreview();
+      if(errEl)errEl.textContent=err.message||'Gagal membaca fail yang dipilih.';
+    }
   });
 }
 
@@ -1001,16 +1140,18 @@ function openApplyClaimDialog(){
       <!-- Receipt Upload Box -->
       <div style="margin-top:10px;padding:14px;border:1px dashed var(--teal);border-radius:8px;background:var(--bg)">
         <label class="field" style="margin:0">
-          <strong style="color:var(--teal)">${icon('clipboard')} Muat Naik Foto Resit Pembayaran Klinik <span style="color:var(--red)">*</span></strong>
-          <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Ambil gambar resit rasmi klinik yang jelas berserta nombor resit & amaun.</p>
-          <input type="file" id="claim-file-input" accept="image/*" capture="environment" required>
+          <strong style="color:var(--teal)">${icon('clipboard')} Muat Naik Foto / PDF Resit Pembayaran Klinik <span style="color:var(--red)">*</span></strong>
+          <p style="font-size:11px;color:var(--muted);margin:4px 0 8px">Ambil gambar resit rasmi atau muat naik fail foto (JPG/PNG) / dokumen PDF resit klinik (maks 6 MB).</p>
+          <input type="file" id="claim-file-input" accept="image/*,application/pdf,.pdf" required>
         </label>
         <div id="claim-preview-box" class="attachment-preview-box" style="display:none">
-          <img id="claim-preview-img" class="attachment-thumb" src="" alt="Pratonton Resit">
-          <div class="attachment-info">
-            <b id="claim-file-name">resit_rawatan.jpg</b>
-            <span style="display:block;color:var(--teal);margin-top:2px">✓ Foto resit dimampatkan & sedia dihantar</span>
+          <img id="claim-preview-img" class="attachment-thumb" src="" alt="Pratonton Resit" style="display:none">
+          <div id="claim-preview-pdf-badge" class="attachment-thumb" style="display:none;align-items:center;justify-content:center;background:#fdeeee;color:#a64545;font-weight:800;font-size:12px">PDF</div>
+          <div class="attachment-info" style="flex:1">
+            <b id="claim-file-name">resit_rawatan</b>
+            <span id="claim-file-status" style="display:block;color:var(--teal);margin-top:2px">✓ Resit sedia dihantar</span>
           </div>
+          <button type="button" id="claim-clear-file" class="secondary mini-btn" style="color:var(--red)">Buang</button>
         </div>
       </div>
 
@@ -1023,13 +1164,52 @@ function openApplyClaimDialog(){
   `);
 
   const fileIn=document.querySelector('#claim-file-input');
+  const prevBox=document.querySelector('#claim-preview-box');
+  const prevImg=document.querySelector('#claim-preview-img');
+  const prevPdf=document.querySelector('#claim-preview-pdf-badge');
+  const fileNameEl=document.querySelector('#claim-file-name');
+  const fileStatEl=document.querySelector('#claim-file-status');
+  const clearBtn=document.querySelector('#claim-clear-file');
+  const errEl=document.querySelector('#apply-claim-error');
+
+  function resetClaimPreview(){
+    fileIn.value='';
+    prevImg.src='';
+    prevImg.style.display='none';
+    prevPdf.style.display='none';
+    prevBox.style.display='none';
+  }
+
+  clearBtn.addEventListener('click',()=>{
+    if(errEl)errEl.textContent='';
+    resetClaimPreview();
+  });
+
   fileIn.addEventListener('change',async e=>{
+    if(errEl)errEl.textContent='';
     const file=e.target.files?.[0];
-    if(!file)return;
-    const base64=await fileToBase64(file);
-    document.querySelector('#claim-preview-img').src=base64;
-    document.querySelector('#claim-file-name').textContent=file.name;
-    document.querySelector('#claim-preview-box').style.display='flex';
+    if(!file){resetClaimPreview();return;}
+    try{
+      const kind=validateAttachmentFile(file);
+      const base64=await fileToBase64(file);
+      if(base64.length>9500000)throw new Error('Saiz fail selepas diproses terlalu besar. Sila pilih fail bawah 6 MB.');
+      if(kind==='pdf'){
+        prevImg.src='';
+        prevImg.style.display='none';
+        prevPdf.style.display='flex';
+        fileStatEl.textContent='✓ Resit PDF sedia dihantar';
+      }else{
+        prevPdf.style.display='none';
+        prevImg.src=base64;
+        prevImg.style.display='block';
+        fileStatEl.textContent='✓ Foto resit dimampatkan & sedia dihantar';
+      }
+      fileNameEl.textContent=file.name;
+      prevBox.style.display='flex';
+    }catch(err){
+      resetClaimPreview();
+      if(errEl)errEl.textContent=err.message||'Gagal membaca fail resit.';
+    }
   });
 }
 
@@ -2046,7 +2226,8 @@ document.addEventListener('click',async e=>{
   if(b.dataset.viewMc){
     const l=myLeaveData.leaves.find(x=>x.id===b.dataset.viewMc)||adminLeaveData.leaves.find(x=>x.id===b.dataset.viewMc);
     if(l?.attachment_url){
-      showImageLightbox('Sijil Cuti Sakit (MC) — '+l.user_name,l.attachment_url);
+      const docTitle=l.leave_type==='hospitalisation'?'Surat Hospitalisasi / MC — ':l.leave_type==='medical'?'Sijil Cuti Sakit (MC) — ':'Dokumen Sokongan Cuti — ';
+      showImageLightbox(docTitle+l.user_name,l.attachment_url,l.attachment_name||'');
     }
   }
   if(b.dataset.leaveAction){
@@ -2082,7 +2263,7 @@ document.addEventListener('click',async e=>{
   if(b.dataset.viewReceipt){
     const c=myClaimData.claims.find(x=>x.id===b.dataset.viewReceipt)||adminClaimData.claims.find(x=>x.id===b.dataset.viewReceipt);
     if(c?.receipt_url){
-      showImageLightbox('Resit Rawatan Klinik — '+c.clinic_name,c.receipt_url);
+      showImageLightbox('Resit Rawatan Klinik — '+c.clinic_name,c.receipt_url,c.receipt_name||'');
     }
   }
   if(b.dataset.claimAction){
@@ -2224,21 +2405,24 @@ document.addEventListener('submit',async e=>{
 
     try{
       const f=new FormData(e.target);
+      const leaveType=String(f.get('leave_type')||'annual');
       const fileIn=document.querySelector('#mc-file-input');
+      const file=fileIn?.files?.[0]||null;
       let attachmentUrl='';
       let attachmentName='';
 
-      if(f.get('leave_type')==='medical'){
-        const file=fileIn?.files?.[0];
-        if(!file){
-          throw new Error('Wajib memuat naik foto dokumen sijil cuti sakit (MC).');
-        }
+      if((leaveType==='medical'||leaveType==='hospitalisation') && !file){
+        throw new Error('Wajib memuat naik foto atau dokumen PDF sijil cuti sakit (MC) / pengesahan hospital.');
+      }
+      if(file){
+        validateAttachmentFile(file);
         attachmentUrl=await fileToBase64(file);
+        if(attachmentUrl.length>9500000)throw new Error('Saiz fail selepas diproses terlalu besar. Sila pilih fail bawah 6 MB.');
         attachmentName=file.name;
       }
 
       await api('apply_leave',{
-        leave_type:f.get('leave_type'),
+        leave_type:leaveType,
         start_date:f.get('start_date'),
         end_date:f.get('end_date'),
         days_count:f.get('days_count'),
@@ -2248,7 +2432,7 @@ document.addEventListener('submit',async e=>{
       });
 
       dialog.close();
-      notify('Permohonan cuti berjaya dihantar.');
+      notify('Permohonan cuti berjaya dihantar dan menunggu kelulusan Pentadbir.');
       await leavesWorkspace();
     }catch(err){
       if(errEl)errEl.textContent=err.message;
@@ -2299,9 +2483,11 @@ document.addEventListener('submit',async e=>{
       const fileIn=document.querySelector('#claim-file-input');
       const file=fileIn?.files?.[0];
       if(!file){
-        throw new Error('Wajib memuat naik foto resit bil klinik.');
+        throw new Error('Wajib memuat naik foto atau dokumen PDF resit bil klinik.');
       }
+      validateAttachmentFile(file);
       const receiptUrl=await fileToBase64(file);
+      if(receiptUrl.length>9500000)throw new Error('Saiz fail resit selepas diproses terlalu besar. Sila pilih fail bawah 6 MB.');
 
       await api('apply_claim',{
         treatment_date:f.get('treatment_date'),
@@ -2313,7 +2499,7 @@ document.addEventListener('submit',async e=>{
       });
 
       dialog.close();
-      notify('Tuntutan perubatan berjaya dihantar untuk semakan Admin.');
+      notify('Tuntutan perubatan berjaya dihantar dan menunggu kelulusan Admin.');
       await claimsWorkspace();
     }catch(err){
       if(errEl)errEl.textContent=err.message;

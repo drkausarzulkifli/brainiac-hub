@@ -248,7 +248,6 @@ if($method==='GET' && $action==='my_leaves') {
 if($method==='POST' && $action==='apply_leave') {
     requirePermanentStaff($u);
     ensureHrTables();
-    $year=(int)date('Y');
     $type=trim((string)($b['leave_type']??'annual'));
     $startDate=trim((string)($b['start_date']??''));
     $endDate=trim((string)($b['end_date']??''));
@@ -256,22 +255,28 @@ if($method==='POST' && $action==='apply_leave') {
     $reason=trim((string)($b['reason']??''));
     $attachmentUrl=trim((string)($b['attachment_url']??''));
     $attachmentName=trim((string)($b['attachment_name']??''));
+    if(!in_array($type,['annual','medical','hospitalisation','maternity'],true))fail(422,'Jenis cuti tidak sah.');
     if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$startDate)||!preg_match('/^\d{4}-\d{2}-\d{2}$/',$endDate))fail(422,'Format tarikh cuti tidak sah.');
     if($endDate<$startDate)fail(422,'Tarikh akhir cuti tidak boleh lebih awal daripada tarikh mula.');
     if($reason==='')fail(422,'Sila masukkan sebab permohonan cuti.');
-    if($type==='medical' && $attachmentUrl==='')fail(422,'Wajib memuat naik foto dokumen sijil cuti sakit (MC).');
+    if(in_array($type,['medical','hospitalisation'],true) && $attachmentUrl==='')fail(422,'Wajib memuat naik foto atau dokumen PDF sijil cuti sakit (MC) / pengesahan hospital.');
+    if($attachmentUrl!==''){
+        if(!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+|application\/pdf);base64,/i',$attachmentUrl))fail(422,'Format dokumen sokongan mesti foto (JPG/PNG) atau PDF sahaja.');
+        if(strlen($attachmentUrl)>9500000)fail(422,'Saiz dokumen sokongan terlalu besar. Sila pilih fail bawah 6 MB.');
+    }
 
-    $bal=ensureStaffLeaveBalance($u['id'],$year);
-    if($bal && in_array($type,['annual','medical','hospitalisation','maternity'],true)){
+    $leaveYear=(int)substr($startDate,0,4);
+    $bal=ensureStaffLeaveBalance($u['id'],$leaveYear);
+    if($bal){
         $tot=(float)$bal[$type.'_total']+($type==='annual'?(float)$bal['annual_carry_forward']:0);
         $usd=(float)$bal[$type.'_used'];
         if(($usd+$days)>$tot)fail(422,"Baki cuti tidak mencukupi (Baki: ".($tot-$usd)." hari).");
     }
     $id=uid();
-    query('INSERT INTO hub_staff_leaves(id,user_id,user_name,leave_type,start_date,end_date,days_count,reason,attachment_url,attachment_name,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+    query('INSERT INTO hub_staff_leaves(id,user_id,user_name,leave_type,start_date,end_date,days_count,reason,attachment_url,attachment_name,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [$id,$u['id'],$u['name'],$type,$startDate,$endDate,$days,$reason,$attachmentUrl?:null,$attachmentName?:null,'Pending',stamp(),stamp()]);
-    audit('apply_leave',['type'=>$type,'days'=>$days,'start'=>$startDate],$u['id']);
-    reply(['ok'=>true,'id'=>$id,'message'=>'Permohonan cuti berjaya dihantar untuk kelulusan Pentadbir.']);
+    audit('apply_leave',['type'=>$type,'days'=>$days,'start'=>$startDate,'has_attachment'=>$attachmentUrl!==''],$u['id']);
+    reply(['ok'=>true,'id'=>$id,'message'=>'Permohonan cuti berjaya dihantar dan menunggu kelulusan Pentadbir (Admin).']);
 }
 
 // Medical Claims (Staff)
@@ -286,27 +291,29 @@ if($method==='GET' && $action==='my_claims') {
 if($method==='POST' && $action==='apply_claim') {
     requirePermanentStaff($u);
     ensureHrTables();
-    $year=(int)date('Y');
     $treatDate=trim((string)($b['treatment_date']??''));
     $clinic=trim((string)($b['clinic_name']??''));
-    $amount=max(0.01,round((float)($b['amount']??0),2));
+    $amount=round((float)($b['amount']??0),2);
     $notes=trim((string)($b['notes']??''));
     $receiptUrl=trim((string)($b['receipt_url']??''));
     $receiptName=trim((string)($b['receipt_name']??''));
     if(!preg_match('/^\d{4}-\d{2}-\d{2}$/',$treatDate))fail(422,'Format tarikh rawatan tidak sah.');
     if($clinic==='')fail(422,'Sila masukkan nama klinik/hospital.');
     if($amount<=0)fail(422,'Jumlah tuntutan mesti lebih daripada RM0.');
-    if($receiptUrl==='')fail(422,'Wajib memuat naik foto resit bil rawatan klinik.');
+    if($receiptUrl==='')fail(422,'Wajib memuat naik foto atau dokumen PDF resit bil rawatan klinik.');
+    if(!preg_match('/^data:(image\/[a-zA-Z0-9.+-]+|application\/pdf);base64,/i',$receiptUrl))fail(422,'Format resit mesti foto (JPG/PNG) atau PDF sahaja.');
+    if(strlen($receiptUrl)>9500000)fail(422,'Saiz fail resit terlalu besar. Sila pilih fail bawah 6 MB.');
 
+    $year=(int)substr($treatDate,0,4);
     $bal=ensureStaffClaimAllowance($u['id'],$year);
     $rem=(float)$bal['balance'];
     if($amount>$rem)fail(422,"Jumlah tuntutan (RM".number_format($amount,2).") melebihi baki elaun perubatan tahunan anda (Baki: RM".number_format($rem,2).").");
 
     $id=uid();
-    query('INSERT INTO hub_medical_claims(id,user_id,user_name,year,treatment_date,clinic_name,amount,receipt_url,receipt_name,notes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)',
+    query('INSERT INTO hub_medical_claims(id,user_id,user_name,year,treatment_date,clinic_name,amount,receipt_url,receipt_name,notes,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',
         [$id,$u['id'],$u['name'],$year,$treatDate,$clinic,$amount,$receiptUrl,$receiptName?:null,$notes,'Pending',stamp(),stamp()]);
     audit('apply_claim',['clinic'=>$clinic,'amount'=>$amount],$u['id']);
-    reply(['ok'=>true,'id'=>$id,'message'=>'Tuntutan perubatan RM'.number_format($amount,2).' berjaya dihantar untuk semakan Admin.']);
+    reply(['ok'=>true,'id'=>$id,'message'=>'Tuntutan perubatan RM'.number_format($amount,2).' berjaya dihantar dan menunggu kelulusan Admin.']);
 }
 
 // Self-Service Payslips
@@ -396,11 +403,11 @@ if($method==='POST' && $action==='admin_leave_action') {
     $adminNotes=trim((string)($b['admin_notes']??''));
     if(!in_array($actionType,['Approved','Rejected'],true))fail(422,'Tindakan kelulusan tidak sah.');
 
-    $leave=query('SELECT * FROM hub_staff_leaves WHERE id=?',[$id])->fetch();
-    if(!$leave)fail(404,'Permohonan cuti tidak ditemui.');
-    if($leave['status']!=='Pending')fail(409,'Permohonan ini telah disemak terdahulu.');
-
     $pdo->beginTransaction();
+    $leave=query('SELECT * FROM hub_staff_leaves WHERE id=?'.lockSuffix(),[$id])->fetch();
+    if(!$leave){$pdo->rollBack();fail(404,'Permohonan cuti tidak ditemui.');}
+    if($leave['status']!=='Pending'){$pdo->rollBack();fail(409,'Permohonan ini telah disemak terdahulu.');}
+
     query('UPDATE hub_staff_leaves SET status=?,admin_notes=?,reviewed_by=?,reviewed_at=?,updated_at=? WHERE id=?',
         [$actionType,$adminNotes,$u['id'],stamp(),stamp(),$id]);
 
@@ -474,11 +481,11 @@ if($method==='POST' && $action==='admin_claim_action') {
     $adminNotes=trim((string)($b['admin_notes']??''));
     if(!in_array($actionType,['Approved','Rejected'],true))fail(422,'Tindakan kelulusan tidak sah.');
 
-    $claim=query('SELECT * FROM hub_medical_claims WHERE id=?',[$id])->fetch();
-    if(!$claim)fail(404,'Tuntutan perubatan tidak ditemui.');
-    if($claim['status']!=='Pending')fail(409,'Tuntutan ini telah disemak terdahulu.');
-
     $pdo->beginTransaction();
+    $claim=query('SELECT * FROM hub_medical_claims WHERE id=?'.lockSuffix(),[$id])->fetch();
+    if(!$claim){$pdo->rollBack();fail(404,'Tuntutan perubatan tidak ditemui.');}
+    if($claim['status']!=='Pending'){$pdo->rollBack();fail(409,'Tuntutan ini telah disemak terdahulu.');}
+
     query('UPDATE hub_medical_claims SET status=?,admin_notes=?,reviewed_by=?,reviewed_at=?,updated_at=? WHERE id=?',
         [$actionType,$adminNotes,$u['id'],stamp(),stamp(),$id]);
 
