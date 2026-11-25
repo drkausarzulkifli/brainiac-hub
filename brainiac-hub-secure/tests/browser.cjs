@@ -19,8 +19,13 @@ const assert=require('node:assert/strict'),path=require('node:path');
  assert.equal(await page.evaluate(()=>data.classNotes[0].actual),'Aktiviti ujian sahaja');
  // A second browser session can read the persisted record.
  const other=await browser.newContext();const p2=await other.newPage();await p2.goto('http://127.0.0.1:8789/');await p2.locator('#auth-email').fill('admin@example.test');await p2.locator('#auth-password').fill('Test-password-123!');await p2.locator('#auth-form button').click();await p2.locator('body[data-auth=ready]').waitFor();assert.equal(await p2.evaluate(()=>data.classNotes[0].actual),'Aktiviti ujian sahaja');
- // Stale write must fail without discarding the form.
+ // Concurrent write to a different collection must merge cleanly and preserve both changes.
  await p2.evaluate(async()=>{data.studentProfiles[0].guardianName='Updated elsewhere';if(!await save())throw Error(lastSaveError)});
+ await page.locator('#class-note-form [name=actual]').fill('Catatan serentak berjaya');await page.locator('#save-note-draft').click();await page.locator('#save-result-dialog[data-result=success][open]').waitFor();await page.locator('#save-result-ok').click();
+ assert.equal(await page.evaluate(()=>data.studentProfiles[0].guardianName),'Updated elsewhere');
+ assert.equal(await page.evaluate(()=>data.classNotes[0].actual),'Catatan serentak berjaya');
+ // True same-record conflict must fail without discarding the form.
+ await p2.evaluate(async()=>{const s=await api('state');data=s.data;serverRevision=s.revision;serverState=structuredClone(s.data);data.classNotes[0].actual='Suntingan p2';if(!await save())throw Error(lastSaveError)});
  await page.locator('#class-note-form [name=actual]').fill('Catatan belum disimpan');await page.locator('#save-note-draft').click();await page.locator('#save-result-dialog[data-result=error][open]').waitFor();assert.match(await page.locator('#save-result-copy').textContent(),/pengguna lain/);await page.locator('#save-result-ok').click();assert.equal(await page.locator('#class-note-form [name=actual]').inputValue(),'Catatan belum disimpan');
  await other.close();
  // Mobile login: no horizontal overflow, branding remains proportionate.

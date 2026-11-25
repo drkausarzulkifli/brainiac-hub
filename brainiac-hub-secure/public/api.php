@@ -42,42 +42,177 @@ if($method==='GET' && $action==='state') {
     reply(['revision'=>(int)$s['revision'],'data'=>json_decode($s['payload'],false,64,JSON_THROW_ON_ERROR)]);
 }
 if($method==='POST' && $action==='state') {
-    $next=$b['data']??null;$rev=$b['revision']??null;$request=$b['requestId']??'';
+    $next=$b['data']??null;$base=$b['base']??null;$rev=$b['revision']??null;$request=$b['requestId']??'';
     $access=['sessions'=>['admin','teacher','therapist'],'plans'=>['admin','teacher'],'enquiries'=>['admin'],'studentProfiles'=>['admin','teacher','therapist'],'staffProfiles'=>['admin'],'datedBookings'=>['admin','teacher','therapist'],'weeklyBookings'=>['admin'],'classNotes'=>['admin','teacher'],'assessments'=>['admin','therapist'],'therapyNotes'=>['admin','therapist'],'progressReports'=>['admin','teacher','therapist']];
-    if(!is_array($next)||!is_int($rev)||!preg_match('/^[a-f0-9-]{32,36}$/D',$request)||array_diff(array_keys($next),array_keys($access))||array_diff(array_keys($access),array_keys($next)))fail(422,'Struktur rekod tidak sah.');
-    foreach($next as $collection=>$rows){
-        if(!is_array($rows)||!array_is_list($rows)||count($rows)>20000)fail(422,'Koleksi rekod tidak sah.');
-        $ids=[];foreach($rows as $r){
-            if(!is_array($r))fail(422,'Rekod tidak sah.');
-            $key=$collection==='datedBookings'?'key':'id';
-            if(!isset($r[$key])||(!is_string($r[$key])&&!is_int($r[$key]))||isset($ids[(string)$r[$key]]))fail(422,'ID rekod kosong atau berulang.');
-            if(!preg_match($key==='key'?'/^[A-Za-z0-9_.:%!\x27()*-]{1,600}$/D':'/^[A-Za-z0-9_.:-]{1,100}$/D',(string)$r[$key]))fail(422,'Format ID rekod tidak sah.');
-            $ids[(string)$r[$key]]=true;
+    $validateState=static function($obj) use ($access){
+        if(!is_array($obj)||array_diff(array_keys($obj),array_keys($access))||array_diff(array_keys($access),array_keys($obj)))fail(422,'Struktur rekod tidak sah.');
+        foreach($obj as $collection=>$rows){
+            if(!is_array($rows)||!array_is_list($rows)||count($rows)>20000)fail(422,'Koleksi rekod tidak sah.');
+            $ids=[];foreach($rows as $r){
+                if(!is_array($r))fail(422,'Rekod tidak sah.');
+                $key=$collection==='datedBookings'?'key':'id';
+                if(!isset($r[$key])||(!is_string($r[$key])&&!is_int($r[$key]))||isset($ids[(string)$r[$key]]))fail(422,'ID rekod kosong atau berulang.');
+                if(!preg_match($key==='key'?'/^[A-Za-z0-9_.:%!\x27()*-]{1,600}$/D':'/^[A-Za-z0-9_.:-]{1,100}$/D',(string)$r[$key]))fail(422,'Format ID rekod tidak sah.');
+                $ids[(string)$r[$key]]=true;
+            }
         }
-    }
+    };
+    if(!is_int($rev)||!preg_match('/^[a-f0-9-]{32,36}$/D',$request))fail(422,'Struktur rekod tidak sah.');
+    $validateState($next);
+    if($base!==null)$validateState($base);
     // Preserve JSON objects such as studentNotes:{}; associative decoding alone turns them into [].
-    $rawState=json_decode(file_get_contents('php://input'),false,64,JSON_THROW_ON_ERROR)->data;
+    $rawBody=json_decode(file_get_contents('php://input'),false,64,JSON_THROW_ON_ERROR);
+    $rawState=$rawBody->data;
+    $rawBase=($base!==null&&isset($rawBody->base)&&$rawBody->base instanceof stdClass)?$rawBody->base:null;
     $payload=json_encode($rawState,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);$digest=hash('sha256',$payload);
     $pdo->beginTransaction();$current=query('SELECT * FROM hub_state WHERE id=1'.lockSuffix())->fetch();
     $u=user();
     $receipt=query('SELECT * FROM hub_writes WHERE id=?',[$request])->fetch();
-    if($receipt){$pdo->rollBack();if($receipt['actor']!==$u['id']||!hash_equals($receipt['digest'],$digest))fail(409,'ID permintaan telah digunakan.');reply(['ok'=>true,'revision'=>(int)$receipt['revision']]);}
-    if((int)$current['revision']!==$rev){$pdo->rollBack();fail(409,'Data telah dikemas kini oleh pengguna lain. Simpan salinan catatan anda, kemudian muat semula halaman sebelum meneruskan.');}
-    $before=json_decode($current['payload'],true,64,JSON_THROW_ON_ERROR);$changes=[];
-    foreach($access as $key=>$roles){
-        if($before[$key]===$next[$key])continue;
-        if(!in_array($u['role'],$roles,true)){$pdo->rollBack();fail(403,'Peranan anda tidak boleh mengubah '.$key.'.');}
-        // Legacy sessions can hold clinical notes: restrict changes to those fields by discipline.
-        if($key==='sessions'&&$u['role']!=='admin'){
-            $old=[];foreach($before[$key] as $r)$old[(string)$r['id']]=$r;
-            if(count($before[$key])!==count($next[$key])){$pdo->rollBack();fail(403,'Gunakan kalendar untuk mengurus sesi.');}
-            foreach($next[$key] as $r){$o=$old[(string)$r['id']]??null;$allowed=['attendance','status','replacement'];if(($o['programme']??'')==='EIP'?$u['role']==='teacher':$u['role']==='therapist')$allowed[]='note';$mask=array_flip($allowed);if(!$o||array_diff_key($r,$mask)!==array_diff_key($o,$mask)){$pdo->rollBack();fail(403,'Perubahan sesi ini tidak dibenarkan.');}}
+    if($receipt){
+        $pdo->rollBack();
+        if($receipt['actor']!==$u['id']||!hash_equals($receipt['digest'],$digest))fail(409,'ID permintaan telah digunakan.');
+        $resp=['ok'=>true,'revision'=>(int)$receipt['revision']];
+        if((int)$current['revision']===(int)$receipt['revision']){
+            $resp['data']=json_decode($current['payload'],false,64,JSON_THROW_ON_ERROR);
         }
-        $changes[]=$key;
+        reply($resp);
     }
-    query('UPDATE hub_state SET revision=revision+1,payload=? WHERE id=1',[$payload]);
-    query('INSERT INTO hub_writes(id,actor,digest,revision,created_at) VALUES(?,?,?,?,?)',[$request,$u['id'],$digest,$rev+1,stamp()]);
-    audit('records_saved',['collections'=>$changes,'revision'=>$rev+1]);$pdo->commit();reply(['ok'=>true,'revision'=>$rev+1]);
+    $currentRev=(int)$current['revision'];
+    if($currentRev===$rev){
+        $before=json_decode($current['payload'],true,64,JSON_THROW_ON_ERROR);$changes=[];
+        foreach($access as $key=>$roles){
+            if($before[$key]===$next[$key])continue;
+            if(!in_array($u['role'],$roles,true)){$pdo->rollBack();fail(403,'Peranan anda tidak boleh mengubah '.$key.'.');}
+            // Legacy sessions can hold clinical notes: restrict changes to those fields by discipline.
+            if($key==='sessions'&&$u['role']!=='admin'){
+                $old=[];foreach($before[$key] as $r)$old[(string)$r['id']]=$r;
+                if(count($before[$key])!==count($next[$key])){$pdo->rollBack();fail(403,'Gunakan kalendar untuk mengurus sesi.');}
+                foreach($next[$key] as $r){$o=$old[(string)$r['id']]??null;$allowed=['attendance','status','replacement'];if(($o['programme']??'')==='EIP'?$u['role']==='teacher':$u['role']==='therapist')$allowed[]='note';$mask=array_flip($allowed);if(!$o||array_diff_key($r,$mask)!==array_diff_key($o,$mask)){$pdo->rollBack();fail(403,'Perubahan sesi ini tidak dibenarkan.');}}
+            }
+            $changes[]=$key;
+        }
+        $newRev=$currentRev+1;
+        query('UPDATE hub_state SET revision=?,payload=? WHERE id=1',[$newRev,$payload]);
+        query('INSERT INTO hub_writes(id,actor,digest,revision,created_at) VALUES(?,?,?,?,?)',[$request,$u['id'],$digest,$newRev,stamp()]);
+        audit('records_saved',['collections'=>$changes,'revision'=>$newRev]);$pdo->commit();reply(['ok'=>true,'revision'=>$newRev]);
+    }
+    if(!$rawBase){$pdo->rollBack();fail(409,'Data telah dikemas kini oleh pengguna lain. Simpan salinan catatan anda, kemudian muat semula halaman sebelum meneruskan.');}
+    $eq=static function(mixed $a,mixed $b) use (&$eq): bool {
+        if($a===$b)return true;
+        if((is_int($a)&&is_float($b))||(is_float($a)&&is_int($b)))return (float)$a===(float)$b;
+        if($a instanceof stdClass&&$b instanceof stdClass){
+            $ka=get_object_vars($a);$kb=get_object_vars($b);
+            if(count($ka)!==count($kb))return false;
+            foreach($ka as $k=>$v){if(!array_key_exists($k,$kb)||!$eq($v,$kb[$k]))return false;}
+            return true;
+        }
+        if(is_array($a)&&is_array($b)){
+            if(count($a)!==count($b))return false;
+            foreach($a as $i=>$v){if(!array_key_exists($i,$b)||!$eq($v,$b[$i]))return false;}
+            return true;
+        }
+        return false;
+    };
+    $mergeLedger=static function(array $bArr,array $cArr,array $nArr) use ($eq): ?array {
+        $toMap=static function(array $rows): ?array {
+            $m=[];foreach($rows as $r){
+                if(!($r instanceof stdClass))return null;
+                $k=isset($r->sourceKey)?((string)$r->sourceKey.'|'.(string)($r->programme??'')):(isset($r->id)?(string)$r->id:'');
+                if($k===''||isset($m[$k]))return null;
+                $m[$k]=$r;
+            }
+            return $m;
+        };
+        $bm=$toMap($bArr);$cm=$toMap($cArr);$nm=$toMap($nArr);
+        if($bm===null||$cm===null||$nm===null)return null;
+        $out=[];$seen=[];
+        foreach($nm as $k=>$nv){
+            if(!isset($cm[$k])&&!isset($bm[$k])){$out[]=$nv;$seen[$k]=true;}
+        }
+        $keys=array_unique(array_merge(array_keys($cm),array_keys($nm),array_keys($bm)));
+        foreach($keys as $k){
+            if(isset($seen[$k]))continue;
+            $ib=$bm[$k]??null;$ic=$cm[$k]??null;$in=$nm[$k]??null;
+            if(($ib===null&&$in===null)||($ib!==null&&$in!==null&&$eq($ib,$in))){if($ic!==null)$out[]=$ic;}
+            elseif(($ib===null&&$ic===null)||($ib!==null&&$ic!==null&&$eq($ib,$ic))){if($in!==null)$out[]=$in;}
+            elseif(($ic===null&&$in===null)||($ic!==null&&$in!==null&&$eq($ic,$in))){if($ic!==null)$out[]=$ic;}
+            else return null;
+        }
+        return $out;
+    };
+    $mergeObj=static function(stdClass $bObj,stdClass $cObj,stdClass $nObj,string $col,int $depth=0) use (&$mergeObj,$mergeLedger,$eq): ?stdClass {
+        $bv=get_object_vars($bObj);$cv=get_object_vars($cObj);$nv=get_object_vars($nObj);
+        $props=array_unique(array_merge(array_keys($cv),array_keys($nv),array_keys($bv)));
+        $res=new stdClass();
+        foreach($props as $p){
+            $hb=array_key_exists($p,$bv);$hc=array_key_exists($p,$cv);$hn=array_key_exists($p,$nv);
+            $vb=$hb?$bv[$p]:null;$vc=$hc?$cv[$p]:null;$vn=$hn?$nv[$p]:null;
+            if($hb===$hn&&(!$hb||$eq($vb,$vn))){if($hc)$res->$p=$vc;}
+            elseif($hb===$hc&&(!$hb||$eq($vb,$vc))){if($hn)$res->$p=$vn;}
+            elseif($hc===$hn&&(!$hc||$eq($vc,$vn))){if($hc)$res->$p=$vc;}
+            elseif($depth===0&&$hb&&$hc&&$hn&&$vb instanceof stdClass&&$vc instanceof stdClass&&$vn instanceof stdClass&&in_array($p,['studentNotes','attendance'],true)){
+                $sub=$mergeObj($vb,$vc,$vn,$col,1);if($sub===null)return null;$res->$p=$sub;
+            }elseif($depth===0&&$col==='studentProfiles'&&$p==='sessionLedger'&&is_array($vb)&&is_array($vc)&&is_array($vn)){
+                $ml=$mergeLedger($vb,$vc,$vn);if($ml===null)return null;$res->$p=$ml;
+            }else return null;
+        }
+        return $res;
+    };
+    $currObj=json_decode($current['payload'],false,64,JSON_THROW_ON_ERROR);
+    $mergedObj=new stdClass();$changes=[];
+    foreach($access as $col=>$roles){
+        $keyField=$col==='datedBookings'?'key':'id';
+        $bRows=$rawBase->$col??[];$cRows=$currObj->$col??[];$nRows=$rawState->$col??[];
+        if($eq($bRows,$nRows)){$mergedObj->$col=$cRows;continue;}
+        if(!in_array($u['role'],$roles,true)){$pdo->rollBack();fail(403,'Peranan anda tidak boleh mengubah '.$col.'.');}
+        $toKeyMap=static function(array $rows) use ($keyField): array {
+            $m=[];foreach($rows as $r){$m[(string)$r->$keyField]=$r;}return $m;
+        };
+        $bm=$toKeyMap($bRows);$cm=$toKeyMap($cRows);$nm=$toKeyMap($nRows);
+        $mergedList=[];$handled=[];
+        // Preserve newly prepended items (e.g. unshifted classNotes) at the front.
+        foreach($nm as $k=>$nv){
+            if(!isset($bm[$k])&&!isset($cm[$k])){
+                if($col==='sessions'&&$u['role']!=='admin'){$pdo->rollBack();fail(403,'Gunakan kalendar untuk mengurus sesi.');}
+                $mergedList[]=$nv;$handled[$k]=true;
+            }
+        }
+        $allKeys=array_unique(array_merge(array_keys($cm),array_keys($nm),array_keys($bm)));
+        foreach($allKeys as $k){
+            if(isset($handled[$k]))continue;
+            $ib=$bm[$k]??null;$ic=$cm[$k]??null;$in=$nm[$k]??null;
+            if(($ib===null&&$in===null)||($ib!==null&&$in!==null&&$eq($ib,$in))){
+                if($ic!==null)$mergedList[]=$ic;
+                continue;
+            }
+            if($col==='sessions'&&$u['role']!=='admin'){
+                if($ib===null||$in===null){$pdo->rollBack();fail(403,'Gunakan kalendar untuk mengurus sesi.');}
+                $oArr=(array)$ib;$rArr=(array)$in;$allowed=['attendance','status','replacement'];
+                if(($oArr['programme']??'')==='EIP'?$u['role']==='teacher':$u['role']==='therapist')$allowed[]='note';
+                $mask=array_flip($allowed);
+                if(array_diff_key($rArr,$mask)!==array_diff_key($oArr,$mask)){$pdo->rollBack();fail(403,'Perubahan sesi ini tidak dibenarkan.');}
+            }
+            if(($ib===null&&$ic===null)||($ib!==null&&$ic!==null&&$eq($ib,$ic))){
+                if($in!==null)$mergedList[]=$in;
+            }elseif(($ic===null&&$in===null)||($ic!==null&&$in!==null&&$eq($ic,$in))){
+                if($ic!==null)$mergedList[]=$ic;
+            }elseif($ib!==null&&$ic!==null&&$in!==null){
+                $mergedRec=$mergeObj($ib,$ic,$in,$col);
+                if($mergedRec===null){$pdo->rollBack();fail(409,'Rekod yang sama telah dikemas kini oleh pengguna lain. Simpan salinan catatan anda, kemudian muat semula halaman sebelum meneruskan.');}
+                $mergedList[]=$mergedRec;
+            }else{
+                $pdo->rollBack();fail(409,'Rekod yang sama telah dikemas kini oleh pengguna lain. Simpan salinan catatan anda, kemudian muat semula halaman sebelum meneruskan.');
+            }
+        }
+        $mergedObj->$col=$mergedList;
+        if(!$eq($cRows,$mergedList))$changes[]=$col;
+    }
+    $newRev=$currentRev+1;
+    $mergedPayload=json_encode($mergedObj,JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
+    query('UPDATE hub_state SET revision=?,payload=? WHERE id=1',[$newRev,$mergedPayload]);
+    query('INSERT INTO hub_writes(id,actor,digest,revision,created_at) VALUES(?,?,?,?,?)',[$request,$u['id'],$digest,$newRev,stamp()]);
+    audit('records_saved',['collections'=>$changes,'revision'=>$newRev,'merged'=>true]);$pdo->commit();
+    reply(['ok'=>true,'revision'=>$newRev,'data'=>$mergedObj,'merged'=>true]);
 }
 function requirePermanentStaff(array $user): void {
     if(($user['role']??'')==='therapist') {

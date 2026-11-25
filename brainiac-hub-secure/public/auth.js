@@ -1,5 +1,5 @@
 // Identity and persistence come from the PHP server. No patient data is stored in localStorage.
-let currentUser=null, csrfToken='', serverRevision=0, serverBusy=false, lastSaveError='', retryWrite=null, suspendedDialog=null, stateLoaded=false;
+let currentUser=null, csrfToken='', serverRevision=0, serverState=null, serverBusy=false, lastSaveError='', retryWrite=null, suspendedDialog=null, stateLoaded=false;
 async function api(action, payload){
  const qIdx=action.indexOf('&');
  const url=qIdx===-1?'/api.php?action='+encodeURIComponent(action):'/api.php?action='+encodeURIComponent(action.slice(0,qIdx))+action.slice(qIdx);
@@ -8,16 +8,39 @@ async function api(action, payload){
  if(!response.ok){const error=new Error(result.error||'Permintaan gagal.');error.status=response.status;throw error}return result;
 }
 function busy(value){serverBusy=value;const box=document.querySelector('#network-dialog');if(value){if(!box.open)box.showModal()}else if(box.open)box.close()}
+function syncActiveNoteRef(){if(typeof activeNote!=='undefined'&&activeNote&&Array.isArray(data?.classNotes)){const found=data.classNotes.find(n=>n.id===activeNote.id);if(found)activeNote=found;}}
 async function serverSave(){
  if(serverBusy){lastSaveError='Tunggu simpanan semasa selesai.';recordSaveResult(false);return false}
  const snapshot=JSON.stringify(data);
  // Resolve an unanswered write using its original ID before submitting any newer edits.
- let pending=retryWrite||{snapshot,requestId:crypto.randomUUID(),revision:serverRevision};
+ let pending=retryWrite||{snapshot,base:serverState?JSON.stringify(serverState):null,requestId:crypto.randomUUID(),revision:serverRevision};
  busy(true);lastSaveError='';
  try{
-  let result=await api('state',{data:JSON.parse(pending.snapshot),revision:pending.revision,requestId:pending.requestId});
-  serverRevision=result.revision;retryWrite=null;
-  if(pending.snapshot!==snapshot){pending={snapshot,requestId:crypto.randomUUID(),revision:serverRevision};result=await api('state',{data:JSON.parse(snapshot),revision:pending.revision,requestId:pending.requestId});serverRevision=result.revision}
+  const bodyPayload={data:JSON.parse(pending.snapshot),revision:pending.revision,requestId:pending.requestId};
+  if(pending.base)bodyPayload.base=JSON.parse(pending.base);
+  let result=await api('state',bodyPayload);
+  serverRevision=result.revision;
+  if(result.data){
+   serverState=structuredClone(result.data);
+   if(pending.snapshot===snapshot){data=structuredClone(result.data);syncActiveNoteRef();}
+  }else{
+   serverState=JSON.parse(pending.snapshot);
+  }
+  retryWrite=null;
+  if(pending.snapshot!==snapshot){
+   pending={snapshot,base:serverState?JSON.stringify(serverState):null,requestId:crypto.randomUUID(),revision:serverRevision};
+   const nextPayload={data:JSON.parse(snapshot),revision:pending.revision,requestId:pending.requestId};
+   if(pending.base)nextPayload.base=JSON.parse(pending.base);
+   result=await api('state',nextPayload);
+   serverRevision=result.revision;
+   if(result.data){
+    serverState=structuredClone(result.data);
+    data=structuredClone(result.data);
+    syncActiveNoteRef();
+   }else{
+    serverState=JSON.parse(snapshot);
+   }
+  }
   recordSaveResult(true);return true;
  }catch(error){
   retryWrite=(!error.status||error.status>=500)?pending:null;
@@ -39,7 +62,7 @@ async function secureBoot(){
 async function enterApp(user){
  const previous=currentUser;currentUser=user;demoRole=user.role;
  if(Number(user.must_change)){document.body.dataset.auth='password';document.querySelector('#password-cancel').textContent='Log keluar';document.querySelector('#password-current').focus();return}
- if(!stateLoaded||!previous){const state=await api('state');data=state.data;serverRevision=state.revision;stateLoaded=true}
+ if(!stateLoaded||!previous){const state=await api('state');data=state.data;serverRevision=state.revision;serverState=structuredClone(state.data);stateLoaded=true}
  else if(previous.id!==user.id||previous.role!==user.role){location.reload();return}
  document.body.dataset.auth='ready';if(!previous||!document.querySelector('#nav').children.length)go();else {applyDemoAccess();if(suspendedDialog){suspendedDialog.showModal();suspendedDialog=null}}
  document.querySelector('.user b').textContent=user.name;

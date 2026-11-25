@@ -32,10 +32,47 @@ class Client{
  state=await teacher.request('state');assert.equal(state.data.assessments.length,1);assert.equal(state.data.therapyNotes.length,1);
  state.data.assessments[0].status='Lengkap';await teacher.request('state',{...state,requestId:crypto.randomUUID()},403);
  state=await teacher.request('state');state.data.staffProfiles.push({id:'staff-test',name:'Blocked'});await teacher.request('state',{...state,requestId:crypto.randomUUID()},403);
+ // Concurrent 2-user optimistic merge tests:
+ // 1. Therapist saves assessment while Teacher (at stale revision with base) saves Class Note -> both preserved.
+ const tBase=await teacher.request('state');const thBase=await therapist.request('state');
+ const thNext=structuredClone(thBase.data);thNext.assessments.push({id:'assessment-concurrent',studentId:'student-test',type:'ot',status:'Draf'});
+ const thSaved=await therapist.request('state',{data:thNext,base:thBase.data,revision:thBase.revision,requestId:crypto.randomUUID()});
+ const tNext=structuredClone(tBase.data);tNext.classNotes.unshift({id:'note-concurrent',studentNotes:{},students:[],title:'Nota Cikgu B',status:'Draf',actual:'Aktiviti 1'});
+ const tMerged=await teacher.request('state',{data:tNext,base:tBase.data,revision:tBase.revision,requestId:crypto.randomUUID()});
+ assert.equal(tMerged.revision,thSaved.revision+1);assert.equal(tMerged.merged,true);
+ assert(tMerged.data.assessments.some(a=>a.id==='assessment-concurrent'));
+ assert(tMerged.data.classNotes.some(n=>n.id==='note-concurrent'));
+ // 2. Same collection (classNotes), different record IDs -> both preserved.
+ const aBase2=await admin.request('state');const tBase2=await teacher.request('state');
+ const aNext2=structuredClone(aBase2.data);aNext2.classNotes.unshift({id:'note-admin-other',studentNotes:{},students:[],title:'Nota Admin',status:'Draf',actual:'Lain'});
+ await admin.request('state',{data:aNext2,base:aBase2.data,revision:aBase2.revision,requestId:crypto.randomUUID()});
+ const tNext2=structuredClone(tBase2.data);tNext2.classNotes.find(n=>n.id==='note-concurrent').actual='Aktiviti 2';
+ const tMerged2=await teacher.request('state',{data:tNext2,base:tBase2.data,revision:tBase2.revision,requestId:crypto.randomUUID()});
+ assert(tMerged2.data.classNotes.some(n=>n.id==='note-admin-other'));
+ assert.equal(tMerged2.data.classNotes.find(n=>n.id==='note-concurrent').actual,'Aktiviti 2');
+ // 3. Same studentProfile record, different fields (guardianPhone vs sessionLedger) -> both preserved.
+ const aBase3=await admin.request('state');const tBase3=await teacher.request('state');
+ const aNext3=structuredClone(aBase3.data);aNext3.studentProfiles[0].guardianPhone='0199999999';
+ await admin.request('state',{data:aNext3,base:aBase3.data,revision:aBase3.revision,requestId:crypto.randomUUID()});
+ const tNext3=structuredClone(tBase3.data);tNext3.studentProfiles[0].sessionLedger=[{id:'led-1',sourceKey:'note:note-concurrent',programme:'eip',date:'2026-11-25'}];
+ const tMerged3=await teacher.request('state',{data:tNext3,base:tBase3.data,revision:tBase3.revision,requestId:crypto.randomUUID()});
+ assert.equal(tMerged3.data.studentProfiles[0].guardianPhone,'0199999999');
+ assert.equal(tMerged3.data.studentProfiles[0].sessionLedger.length,1);
+ // 4. True same-record, same-field conflict -> 409.
+ const aBase4=await admin.request('state');const tBase4=await teacher.request('state');
+ const aNext4=structuredClone(aBase4.data);aNext4.classNotes.find(n=>n.id==='note-concurrent').actual='Suntingan Admin';
+ await admin.request('state',{data:aNext4,base:aBase4.data,revision:aBase4.revision,requestId:crypto.randomUUID()});
+ const tNext4=structuredClone(tBase4.data);tNext4.classNotes.find(n=>n.id==='note-concurrent').actual='Suntingan Cikgu';
+ await teacher.request('state',{data:tNext4,base:tBase4.data,revision:tBase4.revision,requestId:crypto.randomUUID()},409);
+ // 5. Role check enforced during merge -> 403 if therapist tries to edit classNotes at stale revision.
+ const thBase5=await therapist.request('state');const aNext5=structuredClone(thBase5.data);aNext5.assessments.push({id:'assessment-seq',studentId:'student-test',type:'speech',status:'Draf'});
+ await admin.request('state',{data:aNext5,base:thBase5.data,revision:thBase5.revision,requestId:crypto.randomUUID()});
+ const thBad5=structuredClone(thBase5.data);thBad5.classNotes[0].title='Forbidden merge';
+ await therapist.request('state',{data:thBad5,base:thBase5.data,revision:thBase5.revision,requestId:crypto.randomUUID()},403);
  await admin.request('users',{id:(await admin.request('users')).users.find(u=>u.role==='admin').id,name:'Admin Test',email:'admin@example.test',role:'teacher',active:true},422);
  const teacherUser=(await admin.request('users')).users.find(u=>u.role==='teacher');await admin.request('users',{...teacherUser,active:false});await teacher.request('state',undefined,401);
  await admin.request('state',state,403,{'Origin':'https://attacker.example'});
  await therapist.request('logout',{});await therapist.request('state',undefined,401);
  const brute=new Client();await brute.request('session');for(let i=0;i<8;i++)await brute.request('login',{email:'missing@example.test',password:'incorrect'},401);await brute.request('login',{email:'missing@example.test',password:'incorrect'},429);
- console.log('PASS: empty start, setup lock, sessions, CSRF/origin, role writes, shared history, conflict, idempotency, object round-trip, password rotation, account revocation, last-admin protection, logout, rate limiting.');
+ console.log('PASS: empty start, setup lock, sessions, CSRF/origin, role writes, shared history, concurrent 3-way merge, true conflict, idempotency, object round-trip, password rotation, account revocation, last-admin protection, logout, rate limiting.');
 })().catch(e=>{console.error(e);process.exitCode=1});
